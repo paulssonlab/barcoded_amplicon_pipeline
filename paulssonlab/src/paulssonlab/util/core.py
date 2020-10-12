@@ -15,3 +15,8 @@ def grouper(iterable, n, fillvalue=None):
     """Collect data into fixed-length chunks or blocks."""
     args = [iter(iterable)] * n
     return zip_longest(*args, fillvalue=fillvalue)
+
+
+# TODO: simpler version of matriarch.util.get_one
+def first(obj):
+    return next(iter(obj))
