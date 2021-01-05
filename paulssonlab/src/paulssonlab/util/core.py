@@ -11,6 +11,15 @@ def sign(x):
         return 0
 
 
+def format_sign(sgn):
+    if sgn > 0:
+        return "+"
+    elif sgn < 0:
+        return "-"
+    else:
+        return "|"  # TODO: is this the most comprehensible symbol?
+
+
 UNEVEN_GROUPS = object()
 
 # TODO: what does this fancy version even do?? document!!!
