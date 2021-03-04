@@ -1,0 +1,10 @@
+name: sequencing
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - pandas
+  - pip
+  - pre-commit
+  - snakemake-minimal
