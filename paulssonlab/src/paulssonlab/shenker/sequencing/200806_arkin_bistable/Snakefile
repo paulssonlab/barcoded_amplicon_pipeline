@@ -1,0 +1,87 @@
+import pandas as pd
+
+samples = pd.read_csv("samples.tsv", sep="\t", names=["sample", "references"], index_col=False)
+
+samples = {row.sample.replace(".fastq", ""): row.references.split(",") for row in samples.itertuples()}
+
+rule all:
+    input:
+        expand("output/{sample}.sorted.bam.bai", sample=samples.keys())
+
+rule any2fasta:
+    input:
+        "references/{reference}.gb"
+    output:
+        temp("references/{reference}.fasta")
+    conda:
+        "envs/any2fasta.yaml"
+    shell:
+        "any2fasta -q {input} > {output}"
+
+rule merge_fasta:
+    input:
+        lambda wildcards: expand("references/{reference}.fasta", reference=samples[wildcards.sample])
+    output:
+        "output/reference_{sample}.fasta"
+    shell:
+        "cat {input} > {output}"
+
+rule bowtie2_build:
+    input:
+        reference="output/reference_{sample}.fasta"
+    output:
+        multiext(
+            "output/index_{sample}",
+            ".1.bt2", ".2.bt2", ".3.bt2", ".4.bt2", ".rev.1.bt2", ".rev.2.bt2",
+        ),
+    log:
+        "logs/bowtie2_build/{sample}.log"
+    conda:
+        "envs/mapping.yaml"
+    params:
+        indexbase=lambda wildcards, output: output[0].replace(".1.bt2", ""),
+        extra=""
+    threads: 8
+    shell:
+        "bowtie2-build --threads {threads} {params.extra} {input.reference} {params.indexbase} &> {log}"
+
+rule bowtie2_interleaved:
+    input:
+        reads="data/{sample}.fastq",
+        index=multiext(
+            "output/index_{sample}",
+            ".1.bt2", ".2.bt2", ".3.bt2", ".4.bt2", ".rev.1.bt2", ".rev.2.bt2",
+        )
+    output:
+        temp("output/{sample}.bam")
+    log:
+        "logs/bowtie2/{sample}.log"
+    conda:
+        "envs/mapping.yaml"
+    params:
+        indexbase=lambda wildcards, input: input.index[0].replace(".1.bt2", ""),
+        extra="--end-to-end"
+    threads: 8
+    shell:
+        "(bowtie2 --threads {threads} {params.extra} -x {params.indexbase} --interleaved {input.reads} "
+        "| samtools view -Sbh -o {output} -) 2> {log}"
+
+rule samtools_sort:
+    input:
+        "output/{sample}.bam"
+    output:
+        "output/{sample}.sorted.bam"
+    conda:
+        "envs/mapping.yaml"
+    shell:
+        "samtools sort -O bam {input} -o {output}"
+
+rule samtools_index:
+    input:
+        "output/{sample}.sorted.bam"
+    output:
+        "output/{sample}.sorted.bam.bai"
+    conda:
+        "envs/mapping.yaml"
+    shell:
+        "samtools index {input} {output}"
