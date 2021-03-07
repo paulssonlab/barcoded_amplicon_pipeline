@@ -1,0 +1,109 @@
+import pandas as pd
+from pathlib import Path
+
+samples = pd.read_csv("data/samples.tsv", sep="\t", names=["sample", "references"], index_col=False)
+
+samples = {row.sample.replace(".fastq", ""): row.references.split(",") for row in samples.itertuples()}
+
+rule all:
+    input:
+        expand("output/{sample}/racon.fasta.split", sample=samples.keys())
+
+rule any2fasta:
+    input:
+        "references/{reference}.gb"
+    output:
+        temp("references/{reference}.fasta")
+    conda:
+        "envs/any2fasta.yml"
+    shell:
+        "any2fasta -q {input} | seqkit replace -p '(.*)' -r '{wildcards.reference}' > {output}"
+
+rule merge_fasta:
+    input:
+        lambda wildcards: expand("references/{reference}.fasta", reference=samples[wildcards.sample])
+    output:
+        "output/{sample}/reference.fasta"
+    shell:
+        "cat {input} > {output}"
+
+rule merge_reads:
+    input:
+        lambda wildcards: Path(f"data/fastq_pass/{wildcards.sample}").glob("*.fastq")
+    output:
+        "output/{sample}/all_reads.fastq" # TODO: make temp?
+    shell:
+        "cat {input} > {output}"
+
+rule minimap2:
+    input:
+        reads="output/{sample}/all_reads.fastq",
+        target="output/{sample}/reference.fasta"
+    output:
+        "output/{sample}/alignments.sam"
+    log:
+        "logs/minimap2/{sample}.log"
+    conda:
+        "envs/mapping.yml"
+    params:
+        extra="-ax map-ont"
+    threads:
+        8
+    shell:
+        "minimap2 -t {threads} {params.extra} -o {output} {input.target} {input.reads} 2> {log}"
+
+rule samtools_sort:
+    input:
+        "output/{sample}/alignments.sam"
+    output:
+        "output/{sample}/alignments.sorted.sam"
+    conda:
+        "envs/mapping.yml"
+    shell:
+        "samtools sort -O sam {input} -o {output}"
+
+# rule samtools_index:
+#     input:
+#         "output/{sample}/alignments.sorted.sam"
+#     output:
+#         "output/{sample}/alignments.sorted.sam.sai"
+#     conda:
+#         "envs/mapping.yml"
+#     shell:
+#         "samtools index {input} {output}"
+
+rule racon:
+    input:
+        reads="output/{sample}/all_reads.fastq",
+        alignments="output/{sample}/alignments.sorted.sam",
+        target="output/{sample}/reference.fasta"
+    output:
+        "output/{sample}/racon.fasta"
+    log:
+        "logs/racon/{sample}.log"
+    conda:
+        "envs/mapping.yml"
+    params:
+        # medaka's desired options plus "-u" and "--no-trimming"
+        # -u: so that we aren't missing any output files
+        # --no-trimming: otherwise we see deletions
+        extra="-m 8 -x -6 -g -8 -w 500 -u --no-trimming"
+    threads:
+        8
+    shell:
+        "racon -t {threads} {params.extra} {input.reads} {input.alignments} {input.target} > {output} 2> {log}"
+
+rule extract_consensus:
+    input:
+        "output/{sample}/racon.fasta"
+    output:
+        directory("output/{sample}/racon.fasta.split")
+    log:
+        "logs/extract_consensus/{sample}.log"
+    conda:
+        "envs/mapping.yml"
+    params:
+        outdir=lambda wildcards, input: f"{input}.split"
+    shell:
+        "(cat {input} | seqkit replace -p '^(\\S+).*' -r '{wildcards.sample}_$1'"
+        " | seqkit split - --by-id -f -O {params.outdir}) 2> {log}"

@@ -1,0 +1,7 @@
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - any2fasta=0.4.2
+  - seqkit=0.15.0

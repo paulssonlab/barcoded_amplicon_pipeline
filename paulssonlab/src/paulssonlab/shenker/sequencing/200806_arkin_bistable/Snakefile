@@ -1,12 +1,80 @@
 import pandas as pd
+from functools import lru_cache
+import shlex
+# from snakemake.remote.SFTP import RemoteProvider
+from paulssonlab.shenker.sequencing.common import REMOTE_HOST, REMOTE_BASE_DIR
 
-samples = pd.read_csv("samples.tsv", sep="\t", names=["sample", "references"], index_col=False)
+REMOTE_DATA_DIR = f"{REMOTE_BASE_DIR}/!!Jacob Quinn Shenker/200806/200806_arkin_bistable_sequencing"
 
-samples = {row.sample.replace(".fastq", ""): row.references.split(",") for row in samples.itertuples()}
+# SFTP = RemoteProvider()
+
+@lru_cache
+def get_samples():
+    samples = pd.read_csv("data/samples.tsv", sep="\t", names=["sample", "references"], index_col=False)
+    samples = {row.sample.replace(".fastq", ""): row.references.split(",") for row in samples.itertuples()}
+    return samples
+
+# class expand_lookup:
+#     def __init__(self, func, checkpoint, pattern, **kwargs):
+#         self.func = func
+#         self.checkpoint = checkpoint
+#         self.pattern = pattern
+#         self.kwargs = kwargs
+
+#     def __call__(self, wildcards):
+#         checkpoints.get(**wildcards)
+#         # global checkpoints
+#         # getattr(checkpoints, self.checkpoint).get(**w)
+#         data = self.func()
+#         # expansions = {k: data[v] for k, v in self.kwargs.items()}
+#         expansions = {k: v(data) for k, v in self.kwargs.items()}
+#         print("!!!!!!!!", expansions, wildcards)
+#         expansions = {**expansions, **wildcards}
+#         pattern = expand(self.pattern, **expansions)
+#         return pattern
+
+# workdir: ""
+
+# localrules: all, download_samples, download_reads, any2fasta, merge_fasta
 
 rule all:
     input:
-        expand("output/{sample}.sorted.bam.bai", sample=samples.keys())
+        "output/.done"
+        # expand("output/{sample}/consensus.fasta.split", sample=samples.keys())
+
+# rule download_samples:
+#     input:
+#         SFTP.remote(f"{REMOTE_HOST}{REMOTE_DATA_DIR}/samples.tsv")
+#     output:
+#         "data/samples.tsv",
+#     shell:
+#         "mv {input} {output}"
+
+# rule download_reads:
+#     input:
+#         SFTP.glob_wildcards(f"{REMOTE_HOST}{REMOTE_DATA_DIR}/{{sample}}.fastq")
+#     output:
+#         "data/{sample}.fastq",
+#     shell:
+#         "mv {input} {output}"
+
+rule download_samples:
+    output:
+        "data/samples.tsv",
+    shell:
+        f"scp \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/samples.tsv\" {{output}}"
+
+rule download_reads:
+    output:
+        "data/{sample}.fastq",
+    shell:
+        f"scp \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/{{wildcards.sample:q}}.fastq\" {{output}}"
+
+checkpoint have_samples:
+    input:
+        "data/samples.tsv"
+    output:
+        touch("output/.readytorun")
 
 rule any2fasta:
     input:
@@ -14,30 +82,39 @@ rule any2fasta:
     output:
         temp("references/{reference}.fasta")
     conda:
-        "envs/any2fasta.yaml"
+        "envs/any2fasta.yml"
     shell:
-        "any2fasta -q {input} > {output}"
+        "any2fasta -q {input} | seqkit replace -p '(.*)' -r '{wildcards.reference}' > {output}"
+
+def wait_merge_fasta(wildcards):
+    checkpoints.have_samples.get(**wildcards)
+    samples = get_samples()
+    files = expand("references/{reference}.fasta", reference=samples[wildcards.sample])
+    return files
 
 rule merge_fasta:
     input:
-        lambda wildcards: expand("references/{reference}.fasta", reference=samples[wildcards.sample])
+        wait_merge_fasta
+        # lambda wildcards: expand_lookup(get_samples, checkpoints.have_samples, "references/{reference}.fasta", reference=(lambda samples: samples[wildcards.sample]))
+        # lambda wildcards: expand_lookup(get_samples, checkpoints.have_samples, "references/{reference}.fasta", reference=wildcards.sample)
+        # lambda wildcards: expand("references/{reference}.fasta", reference=samples[wildcards.sample])
     output:
-        "output/reference_{sample}.fasta"
+        "output/{sample}/reference.fasta"
     shell:
         "cat {input} > {output}"
 
 rule bowtie2_build:
     input:
-        reference="output/reference_{sample}.fasta"
+        reference="output/{sample}/reference.fasta"
     output:
         multiext(
-            "output/index_{sample}",
+            "output/{sample}/index",
             ".1.bt2", ".2.bt2", ".3.bt2", ".4.bt2", ".rev.1.bt2", ".rev.2.bt2",
-        ),
+        )
     log:
         "logs/bowtie2_build/{sample}.log"
     conda:
-        "envs/mapping.yaml"
+        "envs/mapping.yml"
     params:
         indexbase=lambda wildcards, output: output[0].replace(".1.bt2", ""),
         extra=""
@@ -49,15 +126,15 @@ rule bowtie2_interleaved:
     input:
         reads="data/{sample}.fastq",
         index=multiext(
-            "output/index_{sample}",
+            "output/{sample}/index",
             ".1.bt2", ".2.bt2", ".3.bt2", ".4.bt2", ".rev.1.bt2", ".rev.2.bt2",
         )
     output:
-        temp("output/{sample}.bam")
+        temp("output/{sample}/alignments.bam")
     log:
         "logs/bowtie2/{sample}.log"
     conda:
-        "envs/mapping.yaml"
+        "envs/mapping.yml"
     params:
         indexbase=lambda wildcards, input: input.index[0].replace(".1.bt2", ""),
         extra="--end-to-end"
@@ -68,20 +145,103 @@ rule bowtie2_interleaved:
 
 rule samtools_sort:
     input:
-        "output/{sample}.bam"
+        "output/{sample}/alignments.bam"
     output:
-        "output/{sample}.sorted.bam"
+        "output/{sample}/alignments.sorted.bam"
     conda:
-        "envs/mapping.yaml"
+        "envs/mapping.yml"
     shell:
         "samtools sort -O bam {input} -o {output}"
 
 rule samtools_index:
     input:
-        "output/{sample}.sorted.bam"
+        "output/{sample}/alignments.sorted.bam"
     output:
-        "output/{sample}.sorted.bam.bai"
+        "output/{sample}/alignments.sorted.bam.bai"
     conda:
-        "envs/mapping.yaml"
+        "envs/mapping.yml"
     shell:
         "samtools index {input} {output}"
+
+rule call_variants:
+    input:
+        alignments="output/{sample}/alignments.sorted.bam",
+        reference="output/{sample}/reference.fasta"
+    output:
+        "output/{sample}/calls.bcf"
+    log:
+        "logs/call_variants/{sample}.log"
+    conda:
+        "envs/mapping.yml"
+    params:
+        mpileup_args="--max-depth 2000 --max-idepth 2000",
+        call_args="--ploidy 1"
+    shell:
+        "(bcftools mpileup -Ou {params.mpileup_args} -f {input.reference} {input.alignments}"
+        " | bcftools call -mv -Ob {params.call_args} -o {output}) 2> {log}"
+
+rule filter_variants:
+    input:
+        "output/{sample}/calls.bcf"
+    output:
+        "output/{sample}/calls.filtered.bcf"
+    log:
+        "logs/filter_variants/{sample}.log"
+    conda:
+        "envs/mapping.yml"
+    params:
+        args="-i'%QUAL>20'"
+    shell:
+        "bcftools filter {params.args} -Ob {input} -o {output} 2> {log}"
+
+rule index_variants:
+    input:
+        "output/{sample}/calls.filtered.bcf"
+    output:
+        "output/{sample}/calls.filtered.bcf.csi"
+    conda:
+        "envs/mapping.yml"
+    shell:
+        "bcftools index {input}"
+
+rule get_consensus:
+    input:
+        calls="output/{sample}/calls.filtered.bcf",
+        index="output/{sample}/calls.filtered.bcf.csi",
+        reference="output/{sample}/reference.fasta"
+    output:
+        "output/{sample}/consensus.fasta"
+    log:
+        "logs/get_consensus/{sample}.log"
+    conda:
+        "envs/mapping.yml"
+    shell:
+        "cat {input.reference} | bcftools consensus {input.calls} -o {output} 2> {log}"
+
+rule extract_consensus:
+    input:
+        "output/{sample}/consensus.fasta"
+    output:
+        directory("output/{sample}/consensus.fasta.split")
+    log:
+        "logs/extract_consensus/{sample}.log"
+    conda:
+        "envs/mapping.yml"
+    params:
+        outdir=lambda wildcards, input: f"{input}.split"
+    shell:
+        "(cat {input} | seqkit replace -p '^(\\S+).*' -r '{wildcards.sample}_$1'"
+        " | seqkit split - --by-id -f -O {params.outdir}) 2> {log}"
+
+def wait_finish(wildcards):
+    checkpoints.have_samples.get(**wildcards)
+    samples = get_samples()
+    return expand("output/{sample}/consensus.fasta.split", sample=samples.keys())
+
+rule finish:
+    input:
+        wait_finish
+        # lambda wildcards: expand_lookup(get_samples, checkpoints.have_samples, "output/{sample}/consensus.fasta.split", sample=(lambda samples: samples.keys()))
+        # expand("output/{sample}/consensus.fasta.split", sample=samples.keys())
+    output:
+        touch("output/.done")
