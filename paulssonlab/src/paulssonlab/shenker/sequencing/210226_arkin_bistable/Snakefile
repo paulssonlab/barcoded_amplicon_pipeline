@@ -12,6 +12,8 @@ def get_samples():
     samples = {row.sample.replace(".fastq", ""): row.references.split(",") for row in samples.itertuples()}
     return samples
 
+# workdir: ""
+
 localrules: all, download_samples, download_reads, have_samples, any2fasta, merge_fasta
 
 rule all:
@@ -23,12 +25,6 @@ rule download_samples:
         "data/samples.tsv",
     shell:
         f"scp \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/samples.tsv\" {{output}}"
-
-# rule download_reads:
-#     output:
-#         "data/{sample}.fastq",
-#     shell:
-#         f"scp \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/{{wildcards.sample:q}}.fastq\" {{output}}"
 
 rule download_reads:
     output:
