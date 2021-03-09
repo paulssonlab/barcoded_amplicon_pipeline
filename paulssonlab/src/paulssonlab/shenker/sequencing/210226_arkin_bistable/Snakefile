@@ -1,13 +1,46 @@
 import pandas as pd
 from pathlib import Path
+from functools import lru_cache
+import shlex
+from paulssonlab.shenker.sequencing.common import REMOTE_HOST, REMOTE_BASE_DIR
 
-samples = pd.read_csv("data/samples.tsv", sep="\t", names=["sample", "references"], index_col=False)
+REMOTE_DATA_DIR = f"{REMOTE_BASE_DIR}/!!Jacob Quinn Shenker/210226/20210226_0032_MN35044_afh231_b9fddc76"
 
-samples = {row.sample.replace(".fastq", ""): row.references.split(",") for row in samples.itertuples()}
+@lru_cache
+def get_samples():
+    samples = pd.read_csv("data/samples.tsv", sep="\t", names=["sample", "references"], index_col=False)
+    samples = {row.sample.replace(".fastq", ""): row.references.split(",") for row in samples.itertuples()}
+    return samples
+
+localrules: all, download_samples, download_reads, have_samples, any2fasta, merge_fasta
 
 rule all:
     input:
-        expand("output/{sample}/racon.fasta.split", sample=samples.keys())
+        "output/.done"
+
+rule download_samples:
+    output:
+        "data/samples.tsv",
+    shell:
+        f"scp \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/samples.tsv\" {{output}}"
+
+# rule download_reads:
+#     output:
+#         "data/{sample}.fastq",
+#     shell:
+#         f"scp \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/{{wildcards.sample:q}}.fastq\" {{output}}"
+
+rule download_reads:
+    output:
+        directory("data/fastq_pass")
+    shell:
+        f"scp -r \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/fastq_pass\" {{output}}"
+
+checkpoint have_samples:
+    input:
+        "data/samples.tsv", "data/fastq_pass"
+    output:
+        touch("output/.readytorun")
 
 rule any2fasta:
     input:
@@ -19,11 +52,19 @@ rule any2fasta:
     shell:
         "any2fasta -q {input} | seqkit replace -p '(.*)' -r '{wildcards.reference}' > {output}"
 
+def wait_merge_fasta(wildcards):
+    checkpoints.have_samples.get(**wildcards)
+    samples = get_samples()
+    files = expand("references/{reference}.fasta", reference=samples[wildcards.sample])
+    return files
+
 rule merge_fasta:
     input:
-        lambda wildcards: expand("references/{reference}.fasta", reference=samples[wildcards.sample])
+        wait_merge_fasta
     output:
         "output/{sample}/reference.fasta"
+    wildcard_constraints:
+        input=".+"
     shell:
         "cat {input} > {output}"
 
@@ -32,6 +73,8 @@ rule merge_reads:
         lambda wildcards: Path(f"data/fastq_pass/{wildcards.sample}").glob("*.fastq")
     output:
         "output/{sample}/all_reads.fastq" # TODO: make temp?
+    wildcard_constraints:
+        input=".+"
     shell:
         "cat {input} > {output}"
 
@@ -107,3 +150,14 @@ rule extract_consensus:
     shell:
         "(cat {input} | seqkit replace -p '^(\\S+).*' -r '{wildcards.sample}_$1'"
         " | seqkit split - --by-id -f -O {params.outdir}) 2> {log}"
+
+def wait_finish(wildcards):
+    checkpoints.have_samples.get(**wildcards)
+    samples = get_samples()
+    return expand("output/{sample}/racon.fasta.split", sample=samples.keys())
+
+rule finish:
+    input:
+        wait_finish
+    output:
+        touch("output/.done")
