@@ -2,9 +2,13 @@ import pandas as pd
 from pathlib import Path
 from functools import lru_cache
 import shlex
-from paulssonlab.shenker.sequencing.common import REMOTE_HOST, REMOTE_BASE_DIR
+from paulssonlab.shenker.sequencing.common import get_workdir, REMOTE_HOST, REMOTE_BASE_DIR
 
 REMOTE_DATA_DIR = f"{REMOTE_BASE_DIR}/!!Jacob Quinn Shenker/210226/20210226_0032_MN35044_afh231_b9fddc76"
+
+RERIO_MODEL = "res_dna_r941_min_crf_v032"
+
+RERIO_VERSION = "5b8b90beba6a87d92ad5ef5eb794ec6b91876490"
 
 @lru_cache
 def get_samples():
@@ -12,13 +16,14 @@ def get_samples():
     samples = {row.sample.replace(".fastq", ""): row.references.split(",") for row in samples.itertuples()}
     return samples
 
-# workdir: ""
+workdir: get_workdir()
 
-localrules: all, download_samples, download_reads, have_samples, any2fasta, merge_fasta
+localrules: all, finish, download_samples, download_reads, have_samples, download_rerio, download_rerio_model, any2fasta, merge_fasta
 
 rule all:
     input:
-        "output/.done"
+        f"rerio/basecall_models/{RERIO_MODEL}.jsn"
+        # "output/.done"
 
 rule download_samples:
     output:
@@ -28,15 +33,37 @@ rule download_samples:
 
 rule download_reads:
     output:
-        directory("data/fastq_pass")
+        directory("data/fast5_pass")
     shell:
-        f"scp -r \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/fastq_pass\" {{output}}"
+        f"scp -r \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/fast5_pass\" {{output}}"
 
 checkpoint have_samples:
     input:
-        "data/samples.tsv", "data/fastq_pass"
+        "data/samples.tsv", "data/fast5_pass"
     output:
-        touch("output/.readytorun")
+        touch("output/.have_samples")
+
+rule download_rerio:
+    output:
+        "rerio/.done"
+    conda:
+        "envs/guppy.yml"
+    shell:
+        f"curl -s -L -o rerio.zip \"https://github.com/nanoporetech/rerio/archive/{RERIO_VERSION}.zip\" && "
+        "unzip -q -o rerio.zip && "
+        "rm -rf rerio && "
+        f"mv rerio-{RERIO_VERSION} rerio && "
+        "rm -rf rerio/basecall_models/barcoding && "
+        "cp -R $CONDA_PREFIX/data/barcoding rerio/basecall_models/barcoding && "
+        "touch rerio/.done"
+
+rule download_rerio_model:
+    input:
+        "rerio/.done"
+    output:
+        multiext("rerio/basecall_models/{model}", ".cfg", ".jsn")
+    shell:
+        "python rerio/download_model.py rerio/basecall_models/{wildcards.model} > /dev/null"
 
 rule any2fasta:
     input:
@@ -64,6 +91,14 @@ rule merge_fasta:
     shell:
         "cat {input} > {output}"
 
+rule basecall_guppy:
+    input:
+        "data/fast5_pass"
+    output:
+        "output/guppy-{model}/TODO"
+    shell:
+        "guppy_basecaller -i {input} -o {output} -c {model}"
+
 rule merge_reads:
     input:
         lambda wildcards: Path(f"data/fastq_pass/{wildcards.sample}").glob("*.fastq")
@@ -71,6 +106,8 @@ rule merge_reads:
         "output/{sample}/all_reads.fastq" # TODO: make temp?
     wildcard_constraints:
         input=".+"
+    group:
+        "mapping"
     shell:
         "cat {input} > {output}"
 
@@ -88,6 +125,8 @@ rule minimap2:
         extra="-ax map-ont"
     threads:
         8
+    group:
+        "mapping"
     shell:
         "minimap2 -t {threads} {params.extra} -o {output} {input.target} {input.reads} 2> {log}"
 
@@ -98,6 +137,8 @@ rule samtools_sort:
         "output/{sample}/alignments.sorted.sam"
     conda:
         "envs/mapping.yml"
+    group:
+        "mapping"
     shell:
         "samtools sort -O sam {input} -o {output}"
 
@@ -129,6 +170,8 @@ rule racon:
         extra="-m 8 -x -6 -g -8 -w 500 -u --no-trimming"
     threads:
         8
+    group:
+        "consensus"
     shell:
         "racon -t {threads} {params.extra} {input.reads} {input.alignments} {input.target} > {output} 2> {log}"
 
@@ -143,6 +186,8 @@ rule extract_consensus:
         "envs/mapping.yml"
     params:
         outdir=lambda wildcards, input: f"{input}.split"
+    group:
+        "consensus"
     shell:
         "(cat {input} | seqkit replace -p '^(\\S+).*' -r '{wildcards.sample}_$1'"
         " | seqkit split - --by-id -f -O {params.outdir}) 2> {log}"
