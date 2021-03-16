@@ -5,7 +5,7 @@ from paulssonlab.shenker.sequencing.common import (
     get_workdir,
     REMOTE_HOST,
     REMOTE_BASE_DIR,
-    get_registry_seq,
+    get_registry_seqs,
 )
 
 REMOTE_DATA_DIR = f"{REMOTE_BASE_DIR}/!!Jacob Quinn Shenker/200806/200806_arkin_bistable_sequencing"
@@ -36,17 +36,31 @@ rule download_reads:
     shell:
         f"scp \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/{{wildcards.sample:q}}.fastq\" {{output:q}}"
 
-checkpoint have_samples:
+rule get_references:
+    output:
+        # directory("references")
+        # touch("references/.done")
+        touch(f"{params.output_dir}/.done")
+        # "references/.done"
+    params:
+        output_dir="references"
+    run:
+        references = set().union(*list(get_samples().values()))
+        # get_registry_seqs(references, output[0])
+        get_registry_seqs(references, params.output_dir)
+
+rule have_samples:
     input:
         "data/samples.tsv"
     output:
         touch("output/.have_samples")
 
-rule get_references:
+checkpoint have_references:
+    input:
+        "output/.have_samples",
+        "references/.done"
     output:
-        "references/{reference}.gb"
-    run:
-        get_registry_seq(wildcards.reference, output[0])
+        touch("output/.have_references")
 
 rule any2fasta:
     input:
@@ -59,7 +73,7 @@ rule any2fasta:
         "any2fasta -q {input:q} | seqkit replace -p '(.*)' -r '{wildcards.reference}' > {output:q}"
 
 def wait_merge_fasta(wildcards):
-    checkpoints.have_samples.get(**wildcards)
+    checkpoints.have_references.get(**wildcards)
     samples = get_samples()
     files = expand("references/{reference}.fasta", reference=samples[wildcards.sample])
     return files
@@ -205,7 +219,7 @@ rule extract_consensus:
         " | seqkit split - --by-id -f -O {params.outdir:q}) 2> {log:q}"
 
 def wait_finish(wildcards):
-    checkpoints.have_samples.get(**wildcards)
+    checkpoints.have_references.get(**wildcards)
     samples = get_samples()
     return expand("output/{sample}/consensus.fasta.split", sample=samples.keys())
 

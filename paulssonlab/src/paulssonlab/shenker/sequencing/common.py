@@ -29,12 +29,14 @@ def get_registry(config_dir=CLONING_CONFIG_DIR):
     return reg
 
 
-def get_registry_seq(name, filename, config_dir=CLONING_CONFIG_DIR):
+def get_registry_seqs(names, output_dir, config_dir=CLONING_CONFIG_DIR):
+    output_dir = Path(output_dir)
     reg = get_registry(config_dir)
-    entry = reg.get(name)
-    if "_seq" not in entry:
-        raise ValueError(f"did not find sequence for {name}")
-    seq = entry["_seq"]
-    # filename = output_dir / f"{name}.gb"
-    with open(filename, "w") as f:
-        f.write(seq.format("gb"))
+    for name in names:
+        entry = reg.get(name)
+        if "_seq" not in entry:
+            raise ValueError(f"did not find sequence for {name}")
+        seq = entry["_seq"]
+        filename = output_dir / f"{name}.gb"
+        with open(filename, "w") as f:
+            f.write(seq.format("gb"))
