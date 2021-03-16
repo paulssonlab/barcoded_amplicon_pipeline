@@ -16,6 +16,11 @@ def get_workdir():
         return "."
 
 
+# TODO: Instead of reloading the full registry, this should be replaced
+#       with a lightweight query to google drive for any files named "pLIBxx.gb"
+#       and no calls to gsheets. This would also allow using it for non-registry-compliant
+#       directories of plasmid maps
+# TODO: this caching doesn't work because snakemake forks for each job
 @lru_cache
 def get_registry(config_dir=CLONING_CONFIG_DIR):
     import toml
@@ -29,14 +34,10 @@ def get_registry(config_dir=CLONING_CONFIG_DIR):
     return reg
 
 
-def get_registry_seqs(names, output_dir, config_dir=CLONING_CONFIG_DIR):
-    output_dir = Path(output_dir)
-    reg = get_registry(config_dir)
-    for name in names:
-        entry = reg.get(name)
-        if "_seq" not in entry:
-            raise ValueError(f"did not find sequence for {name}")
-        seq = entry["_seq"]
-        filename = output_dir / f"{name}.gb"
-        with open(filename, "w") as f:
-            f.write(seq.format("gb"))
+def get_registry_seq(reg, name, filename):
+    entry = reg.get(name)
+    if "_seq" not in entry:
+        raise ValueError(f"did not find sequence for {name}")
+    seq = entry["_seq"]
+    with open(filename, "w") as f:
+        f.write(seq.format("gb"))
