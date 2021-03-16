@@ -1,7 +1,12 @@
 import pandas as pd
 from functools import lru_cache
 import shlex
-from paulssonlab.shenker.sequencing.common import REMOTE_HOST, REMOTE_BASE_DIR
+from paulssonlab.shenker.sequencing.common import (
+    get_workdir,
+    REMOTE_HOST,
+    REMOTE_BASE_DIR,
+    get_registry_seq,
+)
 
 REMOTE_DATA_DIR = f"{REMOTE_BASE_DIR}/!!Jacob Quinn Shenker/200806/200806_arkin_bistable_sequencing"
 
@@ -11,9 +16,9 @@ def get_samples():
     samples = {row.sample.replace(".fastq", ""): row.references.split(",") for row in samples.itertuples()}
     return samples
 
-# workdir: ""
+workdir: get_workdir()
 
-localrules: all, download_samples, download_reads, have_samples, any2fasta, merge_fasta
+localrules: all, download_samples, download_reads, have_samples, get_references, any2fasta, merge_fasta
 
 rule all:
     input:
@@ -23,19 +28,25 @@ rule download_samples:
     output:
         "data/samples.tsv",
     shell:
-        f"scp \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/samples.tsv\" {{output}}"
+        f"scp \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/samples.tsv\" {{output:q}}"
 
 rule download_reads:
     output:
         "data/{sample}.fastq",
     shell:
-        f"scp \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/{{wildcards.sample:q}}.fastq\" {{output}}"
+        f"scp \"{REMOTE_HOST}:{shlex.quote(REMOTE_DATA_DIR)}/{{wildcards.sample:q}}.fastq\" {{output:q}}"
 
 checkpoint have_samples:
     input:
         "data/samples.tsv"
     output:
-        touch("output/.readytorun")
+        touch("output/.have_samples")
+
+rule get_references:
+    output:
+        "references/{reference}.gb"
+    run:
+        get_registry_seq(wildcards.reference, output[0])
 
 rule any2fasta:
     input:
@@ -45,7 +56,7 @@ rule any2fasta:
     conda:
         "envs/any2fasta.yml"
     shell:
-        "any2fasta -q {input} | seqkit replace -p '(.*)' -r '{wildcards.reference}' > {output}"
+        "any2fasta -q {input:q} | seqkit replace -p '(.*)' -r '{wildcards.reference}' > {output:q}"
 
 def wait_merge_fasta(wildcards):
     checkpoints.have_samples.get(**wildcards)
@@ -61,7 +72,7 @@ rule merge_fasta:
     wildcard_constraints:
         input=".+"
     shell:
-        "cat {input} > {output}"
+        "cat {input:q} > {output:q}"
 
 rule bowtie2_build:
     input:
@@ -80,7 +91,7 @@ rule bowtie2_build:
         extra=""
     threads: 8
     shell:
-        "bowtie2-build --threads {threads} {params.extra} {input.reference} {params.indexbase} &> {log}"
+        "bowtie2-build --threads {threads} {params.extra} {input.reference:q} {params.indexbase:q} &> {log:q}"
 
 rule bowtie2_interleaved:
     input:
@@ -100,8 +111,8 @@ rule bowtie2_interleaved:
         extra="--end-to-end"
     threads: 8
     shell:
-        "(bowtie2 --threads {threads} {params.extra} -x {params.indexbase} --interleaved {input.reads} "
-        "| samtools view -Sbh -o {output} -) 2> {log}"
+        "(bowtie2 --threads {threads} {params.extra} -x {params.indexbase:q} --interleaved {input.reads:q} "
+        "| samtools view -Sbh -o {output:q} -) 2> {log:q}"
 
 rule samtools_sort:
     input:
@@ -111,7 +122,7 @@ rule samtools_sort:
     conda:
         "envs/mapping.yml"
     shell:
-        "samtools sort -O bam {input} -o {output}"
+        "samtools sort -O bam {input:q} -o {output:q}"
 
 rule samtools_index:
     input:
@@ -121,7 +132,7 @@ rule samtools_index:
     conda:
         "envs/mapping.yml"
     shell:
-        "samtools index {input} {output}"
+        "samtools index {input:q} {output:q}"
 
 rule call_variants:
     input:
@@ -137,8 +148,8 @@ rule call_variants:
         mpileup_args="--max-depth 2000 --max-idepth 2000",
         call_args="--ploidy 1"
     shell:
-        "(bcftools mpileup -Ou {params.mpileup_args} -f {input.reference} {input.alignments}"
-        " | bcftools call -mv -Ob {params.call_args} -o {output}) 2> {log}"
+        "(bcftools mpileup -Ou {params.mpileup_args} -f {input.reference:q} {input.alignments:q}"
+        " | bcftools call -mv -Ob {params.call_args} -o {output:q}) 2> {log:q}"
 
 rule filter_variants:
     input:
@@ -152,7 +163,7 @@ rule filter_variants:
     params:
         args="-i'%QUAL>20'"
     shell:
-        "bcftools filter {params.args} -Ob {input} -o {output} 2> {log}"
+        "bcftools filter {params.args} -Ob {input:q} -o {output:q} 2> {log:q}"
 
 rule index_variants:
     input:
@@ -162,7 +173,7 @@ rule index_variants:
     conda:
         "envs/mapping.yml"
     shell:
-        "bcftools index {input}"
+        "bcftools index {input:q}"
 
 rule get_consensus:
     input:
@@ -176,7 +187,7 @@ rule get_consensus:
     conda:
         "envs/mapping.yml"
     shell:
-        "cat {input.reference} | bcftools consensus {input.calls} -o {output} 2> {log}"
+        "cat {input.reference:q} | bcftools consensus {input.calls:q} -o {output:q} 2> {log:q}"
 
 rule extract_consensus:
     input:
@@ -190,8 +201,8 @@ rule extract_consensus:
     params:
         outdir=lambda wildcards, input: f"{input}.split"
     shell:
-        "(cat {input} | seqkit replace -p '^(\\S+).*' -r '{wildcards.sample}_$1'"
-        " | seqkit split - --by-id -f -O {params.outdir}) 2> {log}"
+        "(cat {input:q} | seqkit replace -p '^(\\S+).*' -r '{wildcards.sample}_$1'"
+        " | seqkit split - --by-id -f -O {params.outdir:q}) 2> {log:q}"
 
 def wait_finish(wildcards):
     checkpoints.have_samples.get(**wildcards)
