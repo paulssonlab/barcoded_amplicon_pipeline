@@ -17,9 +17,9 @@ def get_samples():
     samples = {row.sample.replace(".fastq", ""): row.references.split(",") for row in samples.itertuples()}
     return samples
 
-workdir: get_workdir()
+workdir: get_workdir(make_links=True)
 
-localrules: all, download_samples, download_reads, have_samples, get_references, any2fasta, merge_fasta
+localrules: all, download_samples, download_reads, have_samples, get_references, any2fasta, merge_fasta, finish
 
 rule all:
     input:
@@ -47,7 +47,14 @@ rule get_references:
     output:
         "references/{reference}.gb"
     run:
-        get_registry_seq(get_registry(), wildcards.reference, output[0])
+        import time
+        for retry in range(5):
+            try:
+                get_registry_seq(get_registry(), wildcards.reference, output[0])
+            except:
+                time.sleep(0.3)
+            else:
+                break
 
 rule any2fasta:
     input:
@@ -90,6 +97,7 @@ rule bowtie2_build:
     params:
         indexbase=lambda wildcards, output: output[0].replace(".1.bt2", ""),
         extra=""
+    group: "mapping"
     threads: 8
     shell:
         "bowtie2-build --threads {threads} {params.extra} {input.reference:q} {params.indexbase:q} &> {log:q}"
@@ -102,7 +110,9 @@ rule bowtie2_interleaved:
             ".1.bt2", ".2.bt2", ".3.bt2", ".4.bt2", ".rev.1.bt2", ".rev.2.bt2",
         )
     output:
-        temp("output/{sample}/alignments.bam")
+        # TODO: marking this temp causes this rule to be re-run every time
+        # temp("output/{sample}/alignments.bam")
+        "output/{sample}/alignments.bam"
     log:
         "logs/bowtie2/{sample}.log"
     conda:
@@ -110,6 +120,7 @@ rule bowtie2_interleaved:
     params:
         indexbase=lambda wildcards, input: input.index[0].replace(".1.bt2", ""),
         extra="--end-to-end"
+    group: "mapping"
     threads: 8
     shell:
         "(bowtie2 --threads {threads} {params.extra} -x {params.indexbase:q} --interleaved {input.reads:q} "
@@ -122,6 +133,7 @@ rule samtools_sort:
         "output/{sample}/alignments.sorted.bam"
     conda:
         "envs/mapping.yml"
+    group: "mapping"
     shell:
         "samtools sort -O bam {input:q} -o {output:q}"
 
@@ -132,6 +144,7 @@ rule samtools_index:
         "output/{sample}/alignments.sorted.bam.bai"
     conda:
         "envs/mapping.yml"
+    group: "mapping"
     shell:
         "samtools index {input:q} {output:q}"
 
@@ -148,6 +161,7 @@ rule call_variants:
     params:
         mpileup_args="--max-depth 2000 --max-idepth 2000",
         call_args="--ploidy 1"
+    group: "consensus"
     shell:
         "(bcftools mpileup -Ou {params.mpileup_args} -f {input.reference:q} {input.alignments:q}"
         " | bcftools call -mv -Ob {params.call_args} -o {output:q}) 2> {log:q}"
@@ -163,6 +177,7 @@ rule filter_variants:
         "envs/mapping.yml"
     params:
         args="-i'%QUAL>20'"
+    group: "consensus"
     shell:
         "bcftools filter {params.args} -Ob {input:q} -o {output:q} 2> {log:q}"
 
@@ -173,6 +188,7 @@ rule index_variants:
         "output/{sample}/calls.filtered.bcf.csi"
     conda:
         "envs/mapping.yml"
+    group: "consensus"
     shell:
         "bcftools index {input:q}"
 
@@ -187,6 +203,7 @@ rule get_consensus:
         "logs/get_consensus/{sample}.log"
     conda:
         "envs/mapping.yml"
+    group: "consensus"
     shell:
         "cat {input.reference:q} | bcftools consensus {input.calls:q} -o {output:q} 2> {log:q}"
 
@@ -201,6 +218,7 @@ rule extract_consensus:
         "envs/mapping.yml"
     params:
         outdir=lambda wildcards, input: f"{input}.split"
+    group: "consensus"
     shell:
         "(cat {input:q} | seqkit replace -p '^(\\S+).*' -r '{wildcards.sample}_$1'"
         " | seqkit split - --by-id -f -O {params.outdir:q}) 2> {log:q}"

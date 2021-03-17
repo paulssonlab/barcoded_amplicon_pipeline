@@ -2,13 +2,25 @@ import os
 from pathlib import Path
 from functools import lru_cache
 
+DIRS_TO_LINK = ["data", "references", "output", "logs"]
 REMOTE_HOST = "transfer.rc.hms.harvard.edu"
 REMOTE_BASE_DIR = "/n/files/SysBio/PAULSSON LAB/Personal Folders"
 SCRATCH_SUBDIR = "sequencing"
 CLONING_CONFIG_DIR = Path(__file__).parent.parent / "cloning"
 
 
-def get_workdir():
+def get_workdir(make_links=False, dirs_to_link=DIRS_TO_LINK):
+    workdir = _get_workdir()
+    if workdir != "." and make_links:
+        cwd = Path.cwd()
+        for name in dirs_to_link:
+            src = cwd / name
+            if not src.is_symlink():
+                src.symlink_to(workdir / name, target_is_directory=True)
+    return workdir
+
+
+def _get_workdir():
     if "PAULSSONLAB_SCRATCH" in os.environ:
         project_name = Path.cwd().name
         return Path(os.environ["PAULSSONLAB_SCRATCH"]) / SCRATCH_SUBDIR / project_name
