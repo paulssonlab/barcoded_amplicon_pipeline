@@ -2,3 +2,7 @@
 /*/references
 /*/output
 /*/logs
+/snakemake/*/data
+/snakemake/*/references
+/snakemake/*/output
+/snakemake/*/logs
