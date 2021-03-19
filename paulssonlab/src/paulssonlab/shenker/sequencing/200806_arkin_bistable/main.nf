@@ -75,7 +75,7 @@ process MERGE_FASTAS {
     tuple val(meta), path('seq')
 
     output:
-    path('reference.fasta')
+    tuple val(meta), path('reference.fasta')
 
     shell:
     """
@@ -83,30 +83,88 @@ process MERGE_FASTAS {
     """
 }
 
+// process BOWTIE2_BUILD {
+//     conda: '/envs/mapping.yml'
+// }
+
+process BOWTIE2_BUILD {
+    tag "$meta"
+
+    conda 'envs/mapping.yml'
+
+    input:
+    tuple val(meta), path(fasta)
+
+    output:
+    tuple val(meta), path('bowtie2'), emit: index
+
+    script:
+    """
+    mkdir bowtie2
+    bowtie2-build --threads $task.cpus $fasta bowtie2/${fasta.baseName}
+    """
+}
+
+// process BOWTIE2_INTERLEAVED {
+//     //
+// }
+
 workflow {
     params.samples_list = 'data/samples.dup.tsv'
 
     Channel
         .fromPath(params.samples_list, checkIfExists: true)
         .splitCsv(sep:'\t')
-        .map { row -> [id: row[0], references: row[1].split('\s*,\s*')] }
-        .set { samples }
+        .map { row -> [id: row[0], references: row[1].split('\s*,\s*') as Set] }
+        //.map { row -> [id: row[0], references: row[1].split('\s*,\s*')] }
+        .set { ch_samples }
 
-    samples
+    ch_samples
         .flatMap { meta -> meta.references }
         .unique()
         .collect()
-        .set { reference_names }
+        .set { ch_reference_names }
 
     // zip(reference_names, GET_REGISTRY_SEQS(reference_names.map { it.join(",") }))
     //     .set { references }
 
-    GET_REGISTRY_SEQS(reference_names.map { it.join(",") })
-        //.map { it.collect { f -> [[id: f.getBaseName()], f] }}
+    GET_REGISTRY_SEQS(ch_reference_names.map { it.join(",") })
         .flatMap { it.collect { f -> [[id: f.getBaseName()], f] }}
         .set { ch_references_orig_format }
 
-    ANY2FASTA(ch_references_orig_format).view()
+    ANY2FASTA(ch_references_orig_format)
+        .set { ch_references }
+
+    ch_references
+        .map { [[it[0].id, it[1]]] }
+        .collect()
+        .map { it.collectEntries() }
+        .set { ch_collected_references }
+
+    ch_samples
+        //.map { it.references as Set }
+        .map { it.references }
+        .unique()
+        .set { ch_reference_sets }
+
+    ch_reference_sets
+        .combine(ch_collected_references)
+        .map { ref_set, refs -> [ref_set, ref_set.collect { refs[it] }] }
+        .set { ch_reference_set_fastas }
+
+    MERGE_FASTAS(ch_reference_set_fastas)
+        .set { ch_merged_references }
+
+    BOWTIE2_BUILD(ch_merged_references).index
+        .set { ch_indexes }
+
+    //ch_indexes.view()
+
+    ch_samples
+        .map { [it.references, it] }
+        .join(ch_indexes)
+        .map { [index: it[2], *:it[1]] }
+        .view()
 
     //ANY2FASTA().view()
 

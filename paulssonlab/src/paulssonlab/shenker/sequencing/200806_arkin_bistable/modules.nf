@@ -11,14 +11,6 @@ process SCP {
     '''
 }
 
-process BOWTIE2_BUILD {
-    conda: '/envs/mapping.yml'
-}
-
-process BOWTIE2_INTERLEAVED {
-    //
-}
-
 process SAMTOOLS_SORT {
     //
 }
