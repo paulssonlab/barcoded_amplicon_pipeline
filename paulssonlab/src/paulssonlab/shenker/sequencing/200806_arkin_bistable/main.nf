@@ -19,13 +19,19 @@ nextflow.enable.dsl=2
 include { GET_REGISTRY_SEQS;
           ANY2FASTA;
           MERGE_FASTAS;
-          BOWTIE2_BUILD } from './modules.nf'
+          BOWTIE2_BUILD;
+          BOWTIE2_INTERLEAVED } from './modules.nf'
 
-workflow {
-    params.samples_list = 'data/samples.dup.tsv'
+def inner_join(ch_a, ch_b) {
+    return ch_b.cross(ch_a).map { [it[0][0], *it[1][1..-1], *it[0][1..-1]] }
+}
 
-    Channel
-        .fromPath(params.samples_list, checkIfExists: true)
+workflow PREPARE {
+    take:
+    sample_list
+
+    main:
+    sample_list
         .splitCsv(sep:'\t')
         .map { row -> [id: row[0], references: row[1].split('\s*,\s*') as Set] }
         .map { [reads: file("data/${it.id}.fastq"), *:it]}
@@ -66,20 +72,45 @@ workflow {
     BOWTIE2_BUILD(ch_merged_references).index
         .set { ch_indexes }
 
-    ch_samples
-        .map { [it.references, it] }
-        .join(ch_indexes)
+    inner_join(ch_samples.map { [it.references, it] }, ch_indexes)
+        .join(ch_indexes, remainder: true)
         .map { [index: it[2], *:it[1]] }
-        .view()
+        .set { ch_samples_indexed }
 
-    //ANY2FASTA().view()
+    emit:
+        samples = ch_samples_indexed
+        references = ch_merged_references
+        indexes = ch_indexes
+}
 
-    //references.view()
+workflow CONSENSUS {
+    take:
+    samples_in
 
-    //samples.view()
+    main:
+    BOWTIE2_INTERLEAVED(samples_in.map { [it, it.reads, it.index] })
+        .bam.set { samples }
 
-    // samples
-    //     .map { [it, file("data/${it[0]}\.fastq")] }.view()
-    //     .set { reads }
+    emit:
+    samples
+
+}
+
+workflow {
+    params.sample_list = 'data/samples.dup.tsv'
+
+    Channel
+        .fromPath(params.sample_list, checkIfExists: true)
+        .set { sample_list }
+
+    // def sample_list = file('data/samples.dup.tsv')
+
+    ch_samples_indexed = PREPARE(sample_list).samples
+
+    ch_samples_consensus = CONSENSUS(ch_samples_indexed).samples
+
+    ch_samples_consensus.view()
+
+
 
 }
