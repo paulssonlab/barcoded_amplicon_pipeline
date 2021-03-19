@@ -38,37 +38,41 @@ process GET_REGISTRY_SEQS {
     '''
     #!/usr/bin/env python
     import sys
+    import shutil
     import re
+
+    SOURCE = "/Users/jacob/Dropbox (Personal)/Research/Paulsson/paulssonlab/paulssonlab/src/paulssonlab/shenker/sequencing/200806_arkin_bistable/references/pLIB219.gb"
 
     ids = re.split(r"\\s*,\\s*", sys.stdin.read().rstrip())
     for i, id in enumerate(ids):
-        with open(f"{id}.gb", "w") as f:
-            f.write(f"BLAH {name} BLEE\\n")
+        shutil.copy(SOURCE, f"{id}.gb")
+        #with open(f"{id}.gb", "w") as f:
+        #    f.write(f"BLAH {id} BLEE\\n")
     '''
 }
 
 process ANY2FASTA {
-    tag "$id"
+    tag "$meta.id"
 
     input:
-    tuple val(id), path(input)
+    tuple val(meta), path(input)
 
     output:
-    path("${id}.fasta", type: 'file')
+    tuple val(meta), path("${meta.id}.fasta")
 
     publishDir 'test/references'
 
-    conda '/envs/any2fasta.yml'
+    conda 'envs/any2fasta.yml'
 
     shell:
     """
-    any2fasta $input > ${id}.fasta
+    any2fasta -q $input | seqkit replace -p '(.*)' -r '${meta.id}' > ${meta.id}.fasta
     """
 }
 
 process MERGE_FASTAS {
     input:
-    path('seq')
+    tuple val(meta), path('seq')
 
     output:
     path('reference.fasta')
@@ -94,10 +98,19 @@ workflow {
         .collect()
         .set { reference_names }
 
-    zip(reference_names, GET_REGISTRY_SEQS(reference_names.map { it.join(",") }))
-        .set { references }
+    // zip(reference_names, GET_REGISTRY_SEQS(reference_names.map { it.join(",") }))
+    //     .set { references }
 
-    references.view()
+    GET_REGISTRY_SEQS(reference_names.map { it.join(",") })
+        //.map { it.collect { f -> [[id: f.getBaseName()], f] }}
+        .flatMap { it.collect { f -> [[id: f.getBaseName()], f] }}
+        .set { ch_references_orig_format }
+
+    ANY2FASTA(ch_references_orig_format).view()
+
+    //ANY2FASTA().view()
+
+    //references.view()
 
     //samples.view()
 
