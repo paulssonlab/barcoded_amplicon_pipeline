@@ -20,20 +20,11 @@ process GET_REGISTRY_SEQS {
 
     storeDir 'test/references'
 
+    conda "${src}/cloning/environment.yml"
+
     shell:
     '''
-    #!/usr/bin/env python
-    import sys
-    import shutil
-    import re
-
-    SOURCE = "/Users/jacob/Dropbox (Personal)/Research/Paulsson/paulssonlab/paulssonlab/src/paulssonlab/shenker/sequencing/200806_arkin_bistable/references/pLIB219.gb"
-
-    ids = re.split(r"\\s*,\\s*", sys.stdin.read().rstrip())
-    for i, id in enumerate(ids):
-        shutil.copy(SOURCE, f"{id}.gb")
-        #with open(f"{id}.gb", "w") as f:
-        #    f.write(f"BLAH {id} BLEE\\n")
+    python '!{projectDir}/get_registry_seqs.py' '!{projectDir}/../../cloning'
     '''
 }
 
