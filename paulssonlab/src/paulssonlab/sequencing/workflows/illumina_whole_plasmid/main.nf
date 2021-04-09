@@ -24,9 +24,10 @@ workflow ILLUMINA_WHOLE_PLASMID {
 }
 
 workflow MAIN {
-    STAGE_SAMPLE_SHEET()
-    STAGE_REFERENCES(STAGE_READS.samples)
-    ILLUMINA_WHOLE_PLASMID(STAGE_READS.samples)
+    println SampleSheetParser.load("demo.toml")
+    //STAGE_SAMPLE_SHEET()
+    //STAGE_REFERENCES(STAGE_READS.samples)
+    //ILLUMINA_WHOLE_PLASMID(STAGE_READS.samples)
 }
 
 workflow {
