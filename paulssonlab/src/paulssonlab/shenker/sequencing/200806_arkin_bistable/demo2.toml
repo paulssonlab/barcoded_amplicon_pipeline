@@ -1,0 +1,19 @@
+[[run]]
+name = "default"
+guppy_opts = "-x ont2"
+
+[[run]]
+name = "30x"
+guppy_opts = "-x ont"
+
+[[samples]]
+name = "reads"
+guppy_recall = true
+
+[[samples]]
+name = "barcode02"
+references = ["pLIB121", "pLIB122", "pLIB123"]
+
+[[samples]]
+name = "barcode03"
+references = "pLIB121,pLIB122,pLIB123"
