@@ -1,5 +1,5 @@
 [[params]]
-name = "default"
+foo = 1
 
 [[params]]
 name = "10pct"
@@ -11,7 +11,6 @@ guppy_model = "res_dna_r941_min_crf_v032"
 downsample_frac = 0.1
 
 [[samples]]
-reads_prefix = "reads"
 guppy_recall = true
 
 [[samples]]
@@ -25,3 +24,11 @@ references = ["pLIB121", "pLIB122", "pLIB123"]
 [[samples]]
 reads_prefix = "barcode04"
 references = "pLT160,pLT161,pLT162,pLT163,pLT164,pLT165,pLT166,pLT167"
+
+[[samples]]
+reads_prefix = "barcode05"
+references = ["pLIB121<oLIB193,oLIB194>"]
+
+[[samples]]
+reads_prefix = "barcode06"
+references = ["pLIB121<oLIB193,oLIB194>", "pLIB122<oLIB193,oLIB194>"]

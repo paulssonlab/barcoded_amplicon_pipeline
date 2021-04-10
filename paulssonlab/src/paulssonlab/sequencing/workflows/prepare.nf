@@ -15,6 +15,9 @@ workflow PREPARE_SAMPLE_SHEET {
 }
 
 workflow PREPARE_READS {
+    take:
+    samples
+
     main:
     // TODO: concatenate reads lists if reads is a list (using flatten)
     // TODO: uniquify reads

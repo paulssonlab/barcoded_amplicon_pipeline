@@ -6,30 +6,35 @@ include { PREPARE_SAMPLE_SHEET;
 include { BOWTIE2_BUILD;
           BOWTIE2_INTERLEAVED } from '../../modules/bowtie2.nf'
 
-workflow ILLUMINA_WHOLE_PLASMID {
-    take:
-    samples_in
+// workflow ILLUMINA_WHOLE_PLASMID {
+//     take:
+//     samples_in
 
-    main:
-    PREPROCESS(samples_in)
-    BOWTIE2_BUILD(PREPROCESS.references).index
-    PREPROCESS_FINALIZE(PREPROCESS.samples, BOWTIE2_BUILD.index)
+//     main:
+//     samples_in
+//         .map { [reads_path: "${it.reads_prefix}.fastq", *:it] } // map reads_prefix to reads_path
+//         | PREPARE_READS
+//     // PREPARE_REFERENCES(PREPARE_READS.samples)
+//     // BOWTIE2_BUILD(PREPARE_REFERENCES.references).index
+//     // MERGE_INDICES(PREPARE_REFERENCES.samples, BOWTIE2_BUILD.index)
 
-    BOWTIE2_INTERLEAVED(samples_in.map { [it, it.reads, it.index] })
-        .bam.set { samples }
+//     // BOWTIE2_INTERLEAVED(samples_in.map { [it, it.reads, it.index] })
+//     //     .bam.set { samples }
 
-    emit:
-    samples
+//     emit:
+//     samples
 
-}
+// }
 
 workflow MAIN {
-    println SampleSheetParser.load("demo2.toml")
-    println "XXXX"
-    println SampleSheetParser.load("demo.toml")
-    //STAGE_SAMPLE_SHEET()
-    //STAGE_REFERENCES(STAGE_READS.samples)
-    //ILLUMINA_WHOLE_PLASMID(STAGE_READS.samples)
+    // println SampleSheetParser.load("demo2.toml")
+    // println "XXXX"
+    // println SampleSheetParser.load("demo.toml")
+    SampleSheetParser.load("demo.toml").each {
+        println it
+    }
+    // PREPARE_SAMPLE_SHEET()
+    // ILLUMINA_WHOLE_PLASMID(PREPARE_SAMPLE_SHEET.samples)
 }
 
 workflow {
