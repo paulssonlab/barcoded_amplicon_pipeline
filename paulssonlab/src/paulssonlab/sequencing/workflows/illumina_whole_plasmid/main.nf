@@ -24,6 +24,8 @@ workflow ILLUMINA_WHOLE_PLASMID {
 }
 
 workflow MAIN {
+    println SampleSheetParser.load("demo2.toml")
+    println "XXXX"
     println SampleSheetParser.load("demo.toml")
     //STAGE_SAMPLE_SHEET()
     //STAGE_REFERENCES(STAGE_READS.samples)

@@ -1,19 +1,27 @@
-[[run]]
+[[params]]
 name = "default"
-guppy_opts = "-x ont2"
 
-[[run]]
-name = "30x"
-guppy_opts = "-x ont"
+[[params]]
+name = "10pct"
+downsample_frac = 0.1
+
+[[params]]
+name = "bonito_10pct"
+guppy_model = "res_dna_r941_min_crf_v032"
+downsample_frac = 0.1
 
 [[samples]]
-name = "reads"
+reads_prefix = "reads"
 guppy_recall = true
 
 [[samples]]
-name = "barcode02"
+reads_prefix = "barcode02"
 references = ["pLIB121", "pLIB122", "pLIB123"]
 
 [[samples]]
-name = "barcode03"
-references = "pLIB121,pLIB122,pLIB123"
+reads_prefix = "barcode03"
+references = ["pLIB121", "pLIB122", "pLIB123"]
+
+[[samples]]
+reads_prefix = "barcode04"
+references = "pLT160,pLT161,pLT162,pLT163,pLT164,pLT165,pLT166,pLT167"
