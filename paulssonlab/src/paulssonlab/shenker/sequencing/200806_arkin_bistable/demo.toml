@@ -14,6 +14,10 @@ downsample_frac = 0.1
 guppy_recall = true
 
 [[samples]]
+reads_prefix = "barcode01"
+references = "pLIB100"
+
+[[samples]]
 reads_prefix = "barcode02"
 references = ["pLIB121", "pLIB122", "pLIB123"]
 
