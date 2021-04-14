@@ -1,7 +1,8 @@
 import java.nio.file.Paths
 
 include { scp;
-          inner_join } from '../functions.nf'
+          join_key;
+          join_each } from '../functions.nf'
 
 include { ANY2FASTA;
           MERGE_FASTAS } from '../modules/fastas.nf'
@@ -30,11 +31,13 @@ workflow PREPARE_READS {
         .map { it.reads_path }
         .unique()
         .map {
-           [it.reads_path, scp("${remote_path}/${it.reads_path}", Paths.get(params.data_dir, it.reads_path))]
+           [it, scp("${remote_path}/${it}", Paths.get(workDir as String, params.data_dir, it))]
         }
         .set { ch_reads }
-    inner_join(samples.map { [it.reads_path, it] }, ch_reads)
-        .map {}
+    join_key(samples, ch_reads, "reads_path", "reads")
+        .set { samples_with_reads }
+    // inner_join(samples.map { [it.reads_path, it] }, ch_reads)
+    //     .map {}
 
     // COLLECT, make map
     // MAP OVER reads
@@ -56,6 +59,8 @@ workflow PREPARE_READS {
     //     .map { row -> [id: row[0], references: row[1].split('\s*,\s*') as Set] }
     //     .map { [reads: file("${data_dir}/${it.id}.fastq"), *:it]}
     //     .set { ch_samples }
+    emit:
+    samples_with_reads
 }
 
 workflow PREPARE_REFERENCES {

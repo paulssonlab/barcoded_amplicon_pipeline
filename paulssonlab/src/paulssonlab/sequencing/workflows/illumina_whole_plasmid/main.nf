@@ -32,8 +32,12 @@ workflow MAIN {
     // }
     PREPARE_SAMPLE_SHEET().samples
         .map { [reads_path: "${it.reads_prefix}.fastq", *:it] } // map reads_prefix to reads_path
-        .view()
         | PREPARE_READS
+        | view
+    //     | set { ch_output }
+    // ch_output.view()
+        // | view
+        // .view()
     // ILLUMINA_WHOLE_PLASMID(PREPARE_READS.samples)
 }
 
