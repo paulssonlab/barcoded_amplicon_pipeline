@@ -2,6 +2,7 @@
 import com.moandjiezana.toml.Toml
 
 import nextflow.util.CsvParser
+import java.nio.file.Paths
 
 class SampleSheetParser {
     private static Boolean anyDuplicates(x) {
@@ -64,9 +65,10 @@ class SampleSheetParser {
         def runs = paramSets.collectMany { p ->
             samples.collect { s -> [*:p, *:s] }
         }
-        // if read_prefix in samples, use as name, otherwise empty
-        // check that sample names are unique
-        // for runs, run path is param_set JOIN name if name is non-null, else param_set
+        runs.eachWithIndex { it, index ->
+            it.id = index
+            it.run_path = Paths.get(it.param_set, it.get("name")) as String
+        }
         return runs
     }
 }

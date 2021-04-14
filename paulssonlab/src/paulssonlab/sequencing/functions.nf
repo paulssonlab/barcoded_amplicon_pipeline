@@ -22,6 +22,7 @@ def scp(remote_path, dest_path) {
             throw new Exception("scp of '${remote_path}' to '${dest_path}' failed")
         }
     }
+    return dest
 }
 
 def read_tsv(path) {
