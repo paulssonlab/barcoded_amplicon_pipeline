@@ -1,8 +1,12 @@
 import java.nio.file.Paths
+import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
 
 include { scp;
           join_key;
-          join_each } from '../functions.nf'
+          join_each;
+          join_map;
+          collect_map_key } from '../functions.nf'
 
 include { ANY2FASTA;
           MERGE_FASTAS } from '../modules/fastas.nf'
@@ -23,87 +27,91 @@ workflow PREPARE_SAMPLE_SHEET {
 
 workflow PREPARE_READS {
     take:
-    samples
+    samples_in
 
     main:
     def remote_path = Paths.get(params.remote_path_base, params.remote_path)
-    samples
+    samples_in
         .map { it.reads_path }
         .unique()
         .map {
            [it, scp("${remote_path}/${it}", Paths.get(workDir as String, params.data_dir, it))]
         }
         .set { ch_reads }
-    join_key(samples, ch_reads, "reads_path", "reads")
-        .set { samples_with_reads }
-    // inner_join(samples.map { [it.reads_path, it] }, ch_reads)
-    //     .map {}
+    join_key(samples_in, ch_reads, "reads_path", "reads")
+        .set { samples }
 
-    // COLLECT, make map
-    // MAP OVER reads
-
-    // MAKE FUNCTIONS FOR one-to-one channel joining
-    // AND many-to-one
-
-        // .set { read_files }
-    // inner_join(samples.map { [it.reads_path, it] }, read_files)
-    //     .map { [reads:*:it[1]] }
-    // for (row in samples) {
-    //     def filename = "${row[0]}.fastq"
-    //     scp("${remote_path}/${filename}", "${params.data_dir}/${filename}")
-    // }
-    // TODO: merge turn reads [DIR OR FILE! possibly a list!] into file() objects
-    //samples = Channel.value(sample_list)
-    // sample_list
-    //     //.splitCsv(sep:'\t')
-    //     .map { row -> [id: row[0], references: row[1].split('\s*,\s*') as Set] }
-    //     .map { [reads: file("${data_dir}/${it.id}.fastq"), *:it]}
-    //     .set { ch_samples }
     emit:
-    samples_with_reads
+    samples
+}
+
+def json_command(command, input) {
+    def json_input = JsonOutput.toJson(input)
+    def jsonSlurper = new JsonSlurper()
+    def str = '''{"default/4309_APA4309_321712w_AE5":{"reference_names":["pLIB219","pLIB220"],"references": ["aaa.gb", "bbb.gb"]},
+                  "default/4310_APA4310_321712w_AE6":{"reference_names":["pLIB219","pLIB222"],"references": ["xaa.gb", "bbb.gb"]},
+                  "default/4311_APA4311_321712w_AE7":{"reference_names":["pLIB221","pLIB222"],"references": ["yaa.gb", "bbb.gb"]}}'''
+    def json_output = jsonSlurper.parseText(str)
+    return json_output
 }
 
 workflow PREPARE_REFERENCES {
     take:
-    sample_list
+    samples_in
 
     main:
-
-    ch_samples
-        .flatMap { meta -> meta.references }
-        .unique()
+    def data_dir = Paths.get(workDir as String, params.data_dir)
+    // samples_in.view()
+    samples_in
+        // .flatMap { [(it.run_path): it.reference_names] }
+        .map { [(it.run_path): it.reference_names] }
         .collect()
-        .set { ch_reference_names }
+        .map { it.sum() }
+        .map {
+            def refs = json_command(["${src}/bin/get_registry_seqs.py", data_dir], it)
+            collect_map_key(refs, "references") { ref ->
+                file(Paths.get(data_dir as String, ref))
+            }
+        }
+        // .view()
+        .set { ch_registry_seqs }
+    join_map(samples_in, ch_registry_seqs, "run_path")
+        .view()
 
-    GET_REGISTRY_SEQS(ch_reference_names.map { it.join(",") })
-        .flatMap { it.collect { f -> [[id: f.getBaseName()], f] }}
-        .set { ch_references_orig_format }
+    // ch_samples
+    //     .flatMap { meta -> meta.references }
+    //     .unique()
+    //     .collect()
+    //     .set { ch_reference_names }
 
-    ANY2FASTA(ch_references_orig_format)
-        .set { ch_references }
+    // GET_REGISTRY_SEQS(ch_reference_names.map { it.join(",") })
+    //     .flatMap { it.collect { f -> [[id: f.getBaseName()], f] }}
+    //     .set { ch_references_orig_format }
 
-    ch_references
-        .map { [[it[0].id, it[1]]] }
-        .collect()
-        .map { it.collectEntries() }
-        .set { ch_collected_references }
+    // ANY2FASTA(ch_references_orig_format)
+    //     .set { ch_references }
 
-    ch_samples
-        .map { it.references }
-        .unique()
-        .set { ch_reference_sets }
+    // ch_references
+    //     .map { [[it[0].id, it[1]]] }
+    //     .collect()
+    //     .map { it.collectEntries() }
+    //     .set { ch_collected_references }
 
-    ch_reference_sets
-        .combine(ch_collected_references)
-        .map { ref_set, refs -> [ref_set, ref_set.collect { refs[it] }] }
-        .set { ch_reference_set_fastas }
+    // ch_samples
+    //     .map { it.references }
+    //     .unique()
+    //     .set { ch_reference_sets }
 
-    MERGE_FASTAS(ch_reference_set_fastas)
-        .set { ch_merged_references }
+    // ch_reference_sets
+    //     .combine(ch_collected_references)
+    //     .map { ref_set, refs -> [ref_set, ref_set.collect { refs[it] }] }
+    //     .set { ch_reference_set_fastas }
 
-    emit:
-    samples = ch_samples
-    references = ch_merged_references
+    // MERGE_FASTAS(ch_reference_set_fastas)
+    //     .set { ch_merged_references }
+
+    // emit:
+    // samples = ch_samples
 }
 
 workflow MERGE_INDICES {

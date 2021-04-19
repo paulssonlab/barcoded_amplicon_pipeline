@@ -40,11 +40,24 @@ def read_tsv(path) {
 }
 
 def join_key(ch_a, ch_b, old_key, new_key) {
-    return ch_b.cross(ch_a.map { [it[old_key], it] } ).map { [(new_key): it[0][1], *:it[1][1]] }
+    ch_b.cross(ch_a.map { [it[old_key], it] } ).map { [*:it[1][1], (new_key): it[0][1]] }
 }
 
 def join_each(ch_a, ch_b, old_key, new_key) {
-    return ch_a.combine(ch_b).map { a, b ->
-        [(new_key): a[old_key].collect { b.get(it) }, *:a]
+    ch_a.combine(ch_b).map { a, b ->
+        [*:a, (new_key): a[old_key].collect { b.get(it) }]
+    }
+}
+
+def join_map(ch_entries, ch_map, key) {
+    ch_entries.combine(ch_map).map { entry, map ->
+        [*:entry, *:map.getOrDefault(entry[key], [:])]
+    }
+}
+
+def collect_map_key(map, key, Closure closure) {
+    map.collectEntries { entry ->
+        def value = [*:entry.value, (key): entry.value.get(key)?.collect(closure)]
+        [(entry.key): value]
     }
 }

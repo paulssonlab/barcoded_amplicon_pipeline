@@ -11,7 +11,9 @@ workflow ILLUMINA_WHOLE_PLASMID {
     samples_in
 
     main:
-    PREPARE_REFERENCES(PREPARE_READS.samples)
+    PREPARE_REFERENCES(samples_in)
+    // PREPARE_REFERENCES.references.view()
+    // PREPARE_REFERENCES.samples.view()
     // BOWTIE2_BUILD(PREPARE_REFERENCES.references).index
     // MERGE_INDICES(PREPARE_REFERENCES.samples, BOWTIE2_BUILD.index)
 
@@ -24,21 +26,11 @@ workflow ILLUMINA_WHOLE_PLASMID {
 }
 
 workflow MAIN {
-    // println SampleSheetParser.load("demo2.toml")
-    // println "XXXX"
-    // println SampleSheetParser.load("demo.toml")
-    // SampleSheetParser.load("demo.toml").each {
-    //     println it
-    // }
     PREPARE_SAMPLE_SHEET().samples
-        .map { [reads_path: "${it.reads_prefix}.fastq", *:it] } // map reads_prefix to reads_path
+        // map reads_prefix to reads_path
+        .map { [reads_path: "${it.reads_prefix}.fastq", *:it] }
         | PREPARE_READS
-        | view
-    //     | set { ch_output }
-    // ch_output.view()
-        // | view
-        // .view()
-    // ILLUMINA_WHOLE_PLASMID(PREPARE_READS.samples)
+        | ILLUMINA_WHOLE_PLASMID
 }
 
 workflow {
