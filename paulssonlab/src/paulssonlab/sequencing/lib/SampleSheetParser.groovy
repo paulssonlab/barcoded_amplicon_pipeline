@@ -49,7 +49,8 @@ class SampleSheetParser {
             samples << it
         }
         samples.each {
-            it.references = splitString(it.references)
+            it.reference_names = splitString(it.get("references"))
+            it.remove("references")
             if (!it.get("name")) {
                 it.name = it.getOrDefault("reads_prefix", "default")
             }
