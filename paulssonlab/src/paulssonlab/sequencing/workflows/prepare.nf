@@ -102,29 +102,34 @@ workflow PREPARE_REFERENCES {
 
     ch_references_orig_format
         | ANY2FASTA
-        | view()
-        // .set { ch_references_fasta }
+        // | view()
+        | set { ch_references_fasta }
 
-    // ch_references_fasta
-    //     .map { [(it[0].id): it[1]] }
-    //     .collect()
-    //     .map { it.sum() }
-    //     .set { ch_references_fasta_map }
+    ch_references_fasta
+        .map { [(it[0].id): it[1]] }
+        .collect()
+        .map { it.sum() }
+        .set { ch_references_fasta_map }
     // ch_references_fasta_map.view()
 
     // UNIQUE REFERENCE_SETS (merge fasta)
     ch_get_registry_seqs
-        .flatMap { it.values()*.references.unique() }
+        .flatMap { it.values()*.references.unique()*.collect { f -> f.getBaseName() } }
         .map { [id: it, references: it] }
         .set { ch_reference_sets_orig_format }
+        // .view()
 
-    // join_each(ch_reference_sets_orig_format, ch_references_fasta_map, "references", "references")
-    //     .set { ch_reference_sets }
+    join_each(ch_reference_sets_orig_format, ch_references_fasta_map, "references", "references")
+        .map { [[id: it.id], it.references]}
+        .set { ch_reference_sets }
         // .view()
 
     // ch_reference_sets.view()
-    // MERGE_FASTAS(ch_reference_sets)
-    //     .set { ch_merged_references }
+    MERGE_FASTAS(ch_reference_sets)
+        .set { ch_merged_references }
+
+    ch_merged_references
+        .view()
 
     // ch_get_registry_seqs
     //     .map { hhh }

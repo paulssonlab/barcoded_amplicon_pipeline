@@ -20,7 +20,7 @@ process ANY2FASTA {
 }
 
 process MERGE_FASTAS {
-    tag "$meta"
+    tag "$meta.id"
 
     input:
     tuple val(meta), path('seq')
