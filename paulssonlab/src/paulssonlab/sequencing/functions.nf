@@ -60,9 +60,9 @@ def join_map(ch_entries, ch_map, key) {
     }
 }
 
-def edit_map_key(map, key, Closure closure) {
+def edit_map_key(map, old_key, new_key, Closure closure) {
     map.collectEntries { entry ->
-        def value = [*:entry.value, (key): closure(entry.value.get(key))]
+        def value = [*:entry.value, (new_key): closure(entry.value.get(old_key))]
         [(entry.key): value]
     }
 }

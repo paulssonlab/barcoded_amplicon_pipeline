@@ -68,11 +68,8 @@ def json_command(command, input) {
 
 def get_registry_seqs(references_dir, sample_references) {
     def output = json_command(["${src}/sequencing/bin/get_registry_seqs.py", "${src}/shenker/cloning", references_dir], sample_references)
-    // edit_map_key(output, "references") { it as Set }
-    edit_map_key(output, "references") { refs ->
-        refs.collect { ref ->
-            file(Paths.get(references_dir as String, ref))
-        } as Set
+    edit_map_key(output, "references", "references") { refs ->
+        refs.collect { ref -> file_in_dir(references_dir, ref) } as Set
     }
 }
 
@@ -82,27 +79,21 @@ workflow PREPARE_REFERENCES {
 
     main:
     def references_dir = Paths.get(workDir as String, params.references_dir)
-    // samples_in.view()
     samples_in
-        // .flatMap { [(it.run_path): it.reference_names] }
         .map { [(it.run_path): it.reference_names] }
         .collect()
         .map { it.sum() }
         .map { get_registry_seqs(references_dir, it) }
-        // .view()
         .set { ch_get_registry_seqs }
 
     // UNIQUE REFERENCES (convert to fasta, publishDir)
     ch_get_registry_seqs
-        // .view()
         .map { it.values()*.references.sum().unique() }
-        // .flatMap { it.collect { f -> [[id: f.getBaseName()], file_in_dir(references_dir, f)] } }
         .flatMap { it.collect { f -> [[id: f.getBaseName()], f] } }
         .set { ch_references_orig_format }
 
     ch_references_orig_format
         | ANY2FASTA
-        // | view()
         | set { ch_references_fasta }
 
     ch_references_fasta
@@ -110,60 +101,35 @@ workflow PREPARE_REFERENCES {
         .collect()
         .map { it.sum() }
         .set { ch_references_fasta_map }
-    // ch_references_fasta_map.view()
 
     // UNIQUE REFERENCE_SETS (merge fasta)
     ch_get_registry_seqs
         .flatMap { it.values()*.references.unique()*.collect { f -> f.getBaseName() } }
         .map { [id: it, references: it] }
         .set { ch_reference_sets_orig_format }
-        // .view()
 
     join_each(ch_reference_sets_orig_format, ch_references_fasta_map, "references", "references")
-        .map { [[id: it.id], it.references]}
+        .map { [[id: it.id], it.references] }
         .set { ch_reference_sets }
-        // .view()
 
-    // ch_reference_sets.view()
     MERGE_FASTAS(ch_reference_sets)
         .set { ch_merged_references }
 
     ch_merged_references
         .view()
 
-    // ch_get_registry_seqs
-    //     .map { hhh }
+    ch_get_registry_seqs
+        .map { refs ->
+            edit_map_key(refs, "references", "reference_basenames") { it*.getBaseName() }
+        }
+        .set { ch_get_registry_seqs_with_basenames }
 
-    ////////////////
+    join_map(samples_in, ch_get_registry_seqs_with_basenames, "run_path")
+        .set { samples }
 
-    // join_map(samples_in, ch_get_registry_seqs, "run_path")
-    //     .set { samples }
-
-    // ANY2FASTA(ch_references_orig_format)
-    //     .set { ch_references }
-
-    // ch_references
-    //     .map { [[it[0].id, it[1]]] }
-    //     .collect()
-    //     .map { it.collectEntries() }
-    //     .set { ch_collected_references }
-
-    // ch_samples
-    //     .map { it.references }
-    //     .unique()
-    //     .set { ch_reference_sets }
-
-    // ch_reference_sets
-    //     .combine(ch_collected_references)
-    //     .map { ref_set, refs -> [ref_set, ref_set.collect { refs[it] }] }
-    //     .set { ch_reference_set_fastas }
-
-    // MERGE_FASTAS(ch_reference_set_fastas)
-    //     .set { ch_merged_references }
-
-    // emit:
-    // samples
-    // merged_references
+    emit:
+    samples
+    references = ch_merged_references
 }
 
 workflow MERGE_INDICES {
