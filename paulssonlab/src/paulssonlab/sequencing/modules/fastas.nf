@@ -1,3 +1,5 @@
+import java.nio.file.Paths
+
 process ANY2FASTA {
     tag "$meta.id"
 
@@ -7,9 +9,9 @@ process ANY2FASTA {
     output:
     tuple val(meta), path("${meta.id}.fasta")
 
-    publishDir 'test/references'
+    publishDir "${workDir}/${params.references_dir}"
 
-    conda 'envs/any2fasta.yml'
+    conda "${params.conda_env_dir}/any2fasta.yml"
 
     shell:
     '''

@@ -1,4 +1,9 @@
+import java.nio.file.Paths
 import nextflow.util.CsvParser
+
+def file_in_dir(dir, filename) {
+    file(Paths.get(dir as String, filename as String))
+}
 
 def scp(remote_path, dest_path) {
     def dest = file(dest_path)
@@ -55,9 +60,9 @@ def join_map(ch_entries, ch_map, key) {
     }
 }
 
-def collect_map_key(map, key, Closure closure) {
+def edit_map_key(map, key, Closure closure) {
     map.collectEntries { entry ->
-        def value = [*:entry.value, (key): entry.value.get(key)?.collect(closure)]
+        def value = [*:entry.value, (key): closure(entry.value.get(key))]
         [(entry.key): value]
     }
 }
