@@ -1,7 +1,7 @@
 include { PREPARE_SAMPLE_SHEET;
           PREPARE_READS;
           PREPARE_REFERENCES;
-          MERGE_INDICES } from '../prepare.nf'
+          MERGE_INDEXES } from '../prepare.nf'
 
 include { BOWTIE2_BUILD;
           BOWTIE2_INTERLEAVED } from '../../modules/bowtie2.nf'
@@ -12,10 +12,9 @@ workflow ILLUMINA_WHOLE_PLASMID {
 
     main:
     PREPARE_REFERENCES(samples_in)
-    // PREPARE_REFERENCES.references.view()
-    // PREPARE_REFERENCES.samples.view()
-    // BOWTIE2_BUILD(PREPARE_REFERENCES.references).index
-    // MERGE_INDICES(PREPARE_REFERENCES.samples, BOWTIE2_BUILD.index)
+    BOWTIE2_BUILD(PREPARE_REFERENCES.out.references)
+    MERGE_INDEXES(PREPARE_REFERENCES.out.samples, BOWTIE2_BUILD.out.index)
+    MERGE_INDEXES.out.samples.view()
 
     // BOWTIE2_INTERLEAVED(samples_in.map { [it, it.reads, it.index] })
     //     .bam.set { samples }

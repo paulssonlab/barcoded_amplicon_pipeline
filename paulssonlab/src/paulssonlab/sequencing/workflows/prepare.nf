@@ -4,6 +4,7 @@ import groovy.json.JsonOutput
 
 include { scp;
           join_key;
+          join_key2;
           join_each;
           join_map;
           edit_map_key;
@@ -115,9 +116,6 @@ workflow PREPARE_REFERENCES {
     MERGE_FASTAS(ch_reference_sets)
         .set { ch_merged_references }
 
-    ch_merged_references
-        .view()
-
     ch_get_registry_seqs
         .map { refs ->
             edit_map_key(refs, "references", "reference_basenames") { it*.getBaseName() }
@@ -132,18 +130,15 @@ workflow PREPARE_REFERENCES {
     references = ch_merged_references
 }
 
-workflow MERGE_INDICES {
+workflow MERGE_INDEXES {
     take:
-    ch_samples
-    ch_indexes
+    samples_in
+    indexes_in
 
     main:
-    inner_join(ch_samples.map { [it.references, it] }, ch_indexes)
-        .join(ch_indexes, remainder: true)
-        .map { [index: it[2], *:it[1]] }
+    join_key2(samples_in, indexes_in, "reference_names", "id", "index")
         .set { ch_samples_indexed }
 
     emit:
     samples = ch_samples_indexed
-    indexes = ch_indexes
 }

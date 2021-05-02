@@ -1,7 +1,6 @@
+// SEE: https://github.com/nf-core/modules/blob/master/software/bowtie2/build/main.nf
 process BOWTIE2_BUILD {
-    tag "$meta"
-
-    conda 'envs/mapping.yml'
+    tag "$meta.id"
 
     input:
     tuple val(meta), path(fasta)
@@ -9,17 +8,18 @@ process BOWTIE2_BUILD {
     output:
     tuple val(meta), path('bowtie2'), emit: index
 
-    script:
+    conda "${params.conda_env_dir}/mapping.yml"
+
+    shell:
     '''
     mkdir bowtie2
     bowtie2-build --threads !{task.cpus} !{fasta} bowtie2/!{fasta.baseName}
     '''
 }
 
+// SEE: https://github.com/nf-core/modules/blob/master/software/bowtie2/align/main.nf
 process BOWTIE2_INTERLEAVED {
     tag "$meta.id"
-
-    conda 'envs/mapping.yml'
 
     input:
     tuple val(meta), path(reads), path(index)
@@ -27,6 +27,8 @@ process BOWTIE2_INTERLEAVED {
     output:
     tuple val(meta), path('*.bam'), emit: bam
     tuple val(meta), path('*.log'), emit: log
+
+    conda "${params.conda_env_dir}/mapping.yml"
 
     shell:
     '''

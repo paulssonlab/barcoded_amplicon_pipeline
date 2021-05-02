@@ -48,6 +48,10 @@ def join_key(ch_a, ch_b, old_key, new_key) {
     ch_b.cross(ch_a.map { [it[old_key], it] } ).map { [*:it[1][1], (new_key): it[0][1]] }
 }
 
+def join_key2(ch_a, ch_b, old_key_a, old_key_b, new_key) {
+    join_key(ch_a, ch_b.map { [it[0][old_key_b], it[1]] }, old_key_a, new_key)
+}
+
 def join_each(ch_a, ch_b, old_key, new_key) {
     ch_a.combine(ch_b).map { a, b ->
         [*:a, (new_key): a[old_key].collect { b.get(it) }]
