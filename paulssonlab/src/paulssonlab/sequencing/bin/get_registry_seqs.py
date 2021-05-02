@@ -19,15 +19,6 @@ from paulssonlab.util.hashing import hash_json, freeze
 RETRIES = 3
 RETRY_DELAY = 0.3
 
-# DON'T uniquefy in groovy!!
-# take newline-delimited list of sample references
-# output to stdout comma-delimited filenames
-# TODO: hash dict
-# parse expr_list
-# uniqueify exprs (based on hash)
-# get exprs
-# print filenames to stdout in same order as input exprs
-
 
 def get_registry(config_dir):
     config_dir = Path(config_dir)
