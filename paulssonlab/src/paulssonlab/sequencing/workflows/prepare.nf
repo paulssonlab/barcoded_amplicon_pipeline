@@ -14,7 +14,7 @@ include { ANY2FASTA;
 
 workflow PREPARE_SAMPLE_SHEET {
     main:
-    def sample_sheet_path = Paths.get(workDir as String, params.data_dir, params.sample_sheet_name)
+    def sample_sheet_path = Paths.get(params.data_dir, params.sample_sheet_name)
     def remote_path = Paths.get(params.remote_path_base, params.remote_path)
     scp("${remote_path}/${params.sample_sheet_name}", sample_sheet_path)
     def sample_list = SampleSheetParser.load(sample_sheet_path as String)
@@ -36,7 +36,7 @@ workflow PREPARE_READS {
         .map { it.reads_path }
         .unique()
         .map {
-           [it, scp("${remote_path}/${it}", Paths.get(workDir as String, params.data_dir, it))]
+           [it, scp("${remote_path}/${it}", Paths.get(params.data_dir, it))]
         }
         .set { ch_reads }
     join_key(samples_in, ch_reads, "reads_path", "reads")
@@ -78,7 +78,7 @@ workflow PREPARE_REFERENCES {
     samples_in
 
     main:
-    def references_dir = Paths.get(workDir as String, params.references_dir)
+    def references_dir = Paths.get(params.references_dir)
     samples_in
         .map { [(it.run_path): it.reference_names] }
         .collect()

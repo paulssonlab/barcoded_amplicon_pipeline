@@ -9,7 +9,7 @@ process ANY2FASTA {
     output:
     tuple val(meta), path("${meta.id}.fasta")
 
-    publishDir "${workDir}/${params.references_dir}"
+    publishDir "${params.output_dir}/${params.references_dir}"
 
     conda "${params.conda_env_dir}/any2fasta.yml"
 
