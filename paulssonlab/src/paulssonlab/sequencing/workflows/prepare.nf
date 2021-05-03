@@ -113,6 +113,8 @@ workflow PREPARE_REFERENCES {
         .map { [[id: it.id], it.references] }
         .set { ch_reference_sets }
 
+    // TODO: replace below here with call_process/join_process?
+
     MERGE_FASTAS(ch_reference_sets)
         .set { ch_merged_references }
 

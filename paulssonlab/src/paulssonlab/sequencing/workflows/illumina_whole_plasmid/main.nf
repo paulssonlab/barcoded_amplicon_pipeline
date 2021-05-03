@@ -1,3 +1,5 @@
+include { call_process } from '../../functions.nf'
+
 include { PREPARE_SAMPLE_SHEET;
           PREPARE_READS;
           PREPARE_REFERENCES;
@@ -14,10 +16,34 @@ workflow ILLUMINA_WHOLE_PLASMID {
     PREPARE_REFERENCES(samples_in)
     BOWTIE2_BUILD(PREPARE_REFERENCES.out.references)
     MERGE_INDEXES(PREPARE_REFERENCES.out.samples, BOWTIE2_BUILD.out.index)
-    MERGE_INDEXES.out.samples.view()
+    // MERGE_INDEXES.out.samples.view()
 
-    // BOWTIE2_INTERLEAVED(samples_in.map { [it, it.reads, it.index] })
-    //     .bam.set { samples }
+    //BOWTIE2_INTERLEAVED(MERGE_INDEXES.out.samples.map { [it, it.reads, it.index] })
+    //    .bam.set { samples }
+    //samples.view()
+
+    // MERGE_INDEXES.out.samples
+    //     .map { [*:it, id: it.reads.getBaseName()] }
+    //     .set { ch_samples_with_ }
+    call_process(BOWTIE2_INTERLEAVED,
+                 MERGE_INDEXES.out.samples,
+                 ["reads", "index"],
+                 [id: { it.reads.getBaseName() }],
+                 ["bam", "bowtie2_log"]) {
+        [it.reads, it.index]
+    }
+        .set { ch_mapped_samples }
+    ch_mapped_samples.view()
+    // BOWTIE2_INTERLEAVED.out.bam.view()
+    // use map to specify formatting of reads/index into tuple
+    // join_process(BOWTIE2_INTERLEAVED.out.bam, ["reads", "index"], "bam")
+
+
+    // [[reads, index], sample]
+    // [[reads, index], bam]
+
+    // INPUT TO BOWTIE2_INTERLEAVED: [[reads, index, id: reads.getBaseName()], reads, index]
+    // OUTPUT: [[*:sample, bam:bam, bowtie2_interleaved_log:log]]
 
     // emit:
     // samples

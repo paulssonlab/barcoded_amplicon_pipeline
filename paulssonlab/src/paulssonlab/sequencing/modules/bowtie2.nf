@@ -25,8 +25,7 @@ process BOWTIE2_INTERLEAVED {
     tuple val(meta), path(reads), path(index)
 
     output:
-    tuple val(meta), path('*.bam'), emit: bam
-    tuple val(meta), path('*.log'), emit: log
+    tuple val(meta), path('*.bam'), path('*.log')
 
     conda "${params.conda_env_dir}/mapping.yml"
 

@@ -64,9 +64,39 @@ def join_map(ch_entries, ch_map, key) {
     }
 }
 
+// TODO: if I define a default argument Closure closure = Closure.IDENTITY,
+// I get a wrong number of arguments error
+// this may be a limitation of nextflow functions (is there a difference?),
+// and real Groovy functions (defined in a .groovy file)
+// and/or typed functions may work
 def edit_map_key(map, old_key, new_key, Closure closure) {
-    map.collectEntries { entry ->
-        def value = [*:entry.value, (new_key): closure(entry.value.get(old_key))]
-        [(entry.key): value]
+    map.collectEntries { k, v ->
+        def value = [*:v, (new_key): closure(v.get(old_key))]
+        [(k): value]
     }
+}
+
+def remove_keys(map, keys) {
+    def new_map = map.clone()
+    new_map.keySet().removeAll(keys)
+    new_map
+}
+
+def collect_closures(map, x) {
+    map.collectEntries { k, v -> [(k): v(x) ] }
+}
+
+def call_process(process, ch, join_keys, closure_map, output_keys, Closure closure) {
+    def ch_output = ch.map {
+            [[*:it.subMap(join_keys),
+              *:collect_closures(closure_map, it)], *closure(it)]
+        }
+        .unique()
+        | process
+        | map { [remove_keys(it[0], closure_map.keySet()), *it[1..-1]] }
+    def ch_input = ch.map { [it.subMap(join_keys), it] }
+    ch_output.cross(ch_input)
+        .map {
+            [*:it[1][1], *:[output_keys, it[0][1..-1]].transpose().collectEntries()]
+        }
 }
