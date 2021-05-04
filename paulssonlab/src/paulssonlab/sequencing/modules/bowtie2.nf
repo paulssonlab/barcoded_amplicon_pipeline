@@ -10,15 +10,16 @@ process BOWTIE2_BUILD {
 
     conda "${params.conda_env_dir}/mapping.yml"
 
-    shell:
-    '''
+    script:
+    def bowtie2_build_args = meta.bowtie2_build_args ?: ""
+    """
     mkdir bowtie2
-    bowtie2-build --threads !{task.cpus} !{fasta} bowtie2/!{fasta.baseName}
-    '''
+    bowtie2-build --threads ${task.cpus} ${bowtie2_build_args} ${fasta} bowtie2/${fasta.baseName}
+    """
 }
 
 // SEE: https://github.com/nf-core/modules/blob/master/software/bowtie2/align/main.nf
-process BOWTIE2_INTERLEAVED {
+process BOWTIE2 {
     tag "$meta.id"
 
     input:
@@ -29,12 +30,15 @@ process BOWTIE2_INTERLEAVED {
 
     conda "${params.conda_env_dir}/mapping.yml"
 
-    shell:
-    '''
+    script:
+    // TODO: implement non-interleaved modes: -1 aaa_1.fastq -2 aaa_2.fastq / -U aaa.fastq
+    def bowtie2_args = meta.bowtie2_args ?: "--end-to-end"
+    """
     INDEX=`find -L ./ -name "*.rev.1.bt2" | sed 's/.rev.1.bt2//'`
     (bowtie2 \
-        --threads !{task.cpus} \
-        -x $INDEX --interleaved !{reads} \
-        | samtools view -@ !{task.cpus} -Sbh -o !{meta.id}.bam -) 2> !{meta.id}.bowtie.log
-    '''
+        --threads ${task.cpus} \
+        ${bowtie2_args} \
+        -x \$INDEX --interleaved ${reads} \
+        | samtools view -@ ${task.cpus} -Sbh -o ${meta.id}.bam -) 2> ${meta.id}.bowtie2.log
+    """
 }

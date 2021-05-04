@@ -90,7 +90,7 @@ workflow PREPARE_REFERENCES {
     // UNIQUE REFERENCES (convert to fasta, publishDir)
     ch_get_registry_seqs
         .map { it.values()*.references.sum().unique() }
-        .flatMap { it.collect { f -> [[id: f.getBaseName()], f] } }
+        .flatMap { it.collect { f -> [[id: f.baseName], f] } }
         .set { ch_references_orig_format }
 
     ch_references_orig_format
@@ -105,7 +105,7 @@ workflow PREPARE_REFERENCES {
 
     // UNIQUE REFERENCE_SETS (merge fasta)
     ch_get_registry_seqs
-        .flatMap { it.values()*.references.unique()*.collect { f -> f.getBaseName() } }
+        .flatMap { it.values()*.references.unique()*.collect { f -> f.baseName } }
         .map { [id: it, references: it] }
         .set { ch_reference_sets_orig_format }
 
@@ -120,7 +120,7 @@ workflow PREPARE_REFERENCES {
 
     ch_get_registry_seqs
         .map { refs ->
-            edit_map_key(refs, "references", "reference_basenames") { it*.getBaseName() }
+            edit_map_key(refs, "references", "reference_basenames") { it*.baseName }
         }
         .set { ch_get_registry_seqs_with_basenames }
 

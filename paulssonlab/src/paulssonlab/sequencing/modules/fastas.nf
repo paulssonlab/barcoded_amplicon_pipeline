@@ -28,12 +28,26 @@ process MERGE_FASTAS {
     output:
     tuple val(meta), path('reference.fasta')
 
-    shell:
-    '''
+    script:
+    """
     cat seq* > reference.fasta
-    '''
+    """
 }
 
-// process EXTRACT_CONSENSUS {
-//     //
-// }
+process EXTRACT_CONSENSUS {
+    tag "$meta.id"
+
+    input:
+    tuple val(meta), path(fasta)
+
+    output:
+    tuple val(meta), path("*.consensus"), path("*.log")
+
+    conda "${params.conda_env_dir}/mapping.yml"
+
+    script:
+    """
+    (cat ${fasta} | seqkit replace -p '^(\\S+).*' -r '!{meta.id}_\$1'
+     | seqkit split - --by-id -f -O ${meta.id}.consensus) 2> ${meta.id}.extract_consensus.log
+    """
+}

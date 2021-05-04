@@ -6,7 +6,10 @@ include { PREPARE_SAMPLE_SHEET;
           MERGE_INDEXES } from '../prepare.nf'
 
 include { BOWTIE2_BUILD;
-          BOWTIE2_INTERLEAVED } from '../../modules/bowtie2.nf'
+          BOWTIE2 } from '../../modules/bowtie2.nf'
+
+include { SAMTOOLS_SORT;
+          SAMTOOLS_INDEX } from '../../modules/samtools.nf'
 
 workflow ILLUMINA_WHOLE_PLASMID {
     take:
@@ -14,36 +17,43 @@ workflow ILLUMINA_WHOLE_PLASMID {
 
     main:
     PREPARE_REFERENCES(samples_in)
+    // TODO: use call_process for BOWTIE2_BUILD so can build index with different arguments
     BOWTIE2_BUILD(PREPARE_REFERENCES.out.references)
     MERGE_INDEXES(PREPARE_REFERENCES.out.samples, BOWTIE2_BUILD.out.index)
-    // MERGE_INDEXES.out.samples.view()
 
-    //BOWTIE2_INTERLEAVED(MERGE_INDEXES.out.samples.map { [it, it.reads, it.index] })
-    //    .bam.set { samples }
-    //samples.view()
-
-    // MERGE_INDEXES.out.samples
-    //     .map { [*:it, id: it.reads.getBaseName()] }
-    //     .set { ch_samples_with_ }
-    call_process(BOWTIE2_INTERLEAVED,
+    call_process(BOWTIE2,
                  MERGE_INDEXES.out.samples,
-                 ["reads", "index"],
-                 [id: { it.reads.getBaseName() }],
-                 ["bam", "bowtie2_log"]) {
-        [it.reads, it.index]
-    }
-        .set { ch_mapped_samples }
-    ch_mapped_samples.view()
-    // BOWTIE2_INTERLEAVED.out.bam.view()
-    // use map to specify formatting of reads/index into tuple
-    // join_process(BOWTIE2_INTERLEAVED.out.bam, ["reads", "index"], "bam")
+                 ["reads", "index", "bowtie2_args"],
+                 [id: { it.reads.baseName }],
+                 ["bam", "bowtie2_log"]) { [it.reads, it.index] }
+        .set { ch_mapped }
 
+    call_process(SAMTOOLS_SORT,
+                 ch_mapped,
+                 ["bam"],
+                 [id: { it.bam.name }],
+                 ["sorted_bam"]) { [it.bam] }
+        .set { ch_sorted }
 
-    // [[reads, index], sample]
-    // [[reads, index], bam]
+    // ch_sorted.map { it.sorted_bam.name }.view()
+    call_process(SAMTOOLS_INDEX,
+                 ch_sorted,
+                 ["sorted_bam"],
+                 [id: { it.sorted_bam.name }],
+                 ["sorted_bam_index"]) { [it.sorted_bam] }
+        .set { ch_indexed }
 
-    // INPUT TO BOWTIE2_INTERLEAVED: [[reads, index, id: reads.getBaseName()], reads, index]
-    // OUTPUT: [[*:sample, bam:bam, bowtie2_interleaved_log:log]]
+    ch_indexed
+        .view()
+        // .set { ch_sorted }
+
+    // CALL_VARIANTS
+    // FILTER_VARIANTS
+    // INDEX_VARIANTS (?)
+    // GET_CONSENSUS
+    // EXTRACT_CONSENSUS
+
+    // TODO: fix /tmp/.../tmp issue
 
     // emit:
     // samples
