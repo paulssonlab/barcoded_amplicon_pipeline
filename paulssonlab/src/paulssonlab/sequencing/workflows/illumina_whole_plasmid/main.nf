@@ -6,10 +6,10 @@ include { PREPARE_SAMPLE_SHEET;
           MERGE_INDEXES } from '../prepare.nf'
 
 include { BOWTIE2_BUILD;
-          BOWTIE2 } from '../../modules/bowtie2.nf'
+          call_BOWTIE2 } from '../../modules/bowtie2.nf'
 
-include { SAMTOOLS_SORT;
-          SAMTOOLS_INDEX } from '../../modules/samtools.nf'
+include { call_SAMTOOLS_SORT;
+          call_SAMTOOLS_INDEX } from '../../modules/samtools.nf'
 
 workflow ILLUMINA_WHOLE_PLASMID {
     take:
@@ -21,26 +21,13 @@ workflow ILLUMINA_WHOLE_PLASMID {
     BOWTIE2_BUILD(PREPARE_REFERENCES.out.references)
     MERGE_INDEXES(PREPARE_REFERENCES.out.samples, BOWTIE2_BUILD.out.index)
 
-    call_process(BOWTIE2,
-                 MERGE_INDEXES.out.samples,
-                 ["reads", "index", "bowtie2_args"],
-                 [id: { it.reads.baseName }],
-                 ["bam", "bowtie2_log"]) { [it.reads, it.index] }
+    call_BOWTIE2(MERGE_INDEXES.out.samples)
         .set { ch_mapped }
 
-    call_process(SAMTOOLS_SORT,
-                 ch_mapped,
-                 ["bam"],
-                 [id: { it.bam.name }],
-                 ["sorted_bam"]) { [it.bam] }
+    call_SAMTOOLS_SORT(ch_mapped)
         .set { ch_sorted }
 
-    // ch_sorted.map { it.sorted_bam.name }.view()
-    call_process(SAMTOOLS_INDEX,
-                 ch_sorted,
-                 ["sorted_bam"],
-                 [id: { it.sorted_bam.name }],
-                 ["sorted_bam_index"]) { [it.sorted_bam] }
+    call_SAMTOOLS_INDEX(ch_sorted)
         .set { ch_indexed }
 
     ch_indexed

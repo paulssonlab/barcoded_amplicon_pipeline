@@ -1,3 +1,5 @@
+include { call_process } from '../functions.nf'
+
 process SAMTOOLS_SORT {
     tag "$meta.id"
 
@@ -15,6 +17,14 @@ process SAMTOOLS_SORT {
     """
 }
 
+def call_SAMTOOLS_SORT(ch) {
+    call_process(SAMTOOLS_SORT,
+                ch,
+                ["bam"],
+                [id: { it.bam.name }],
+                ["sorted_bam"]) { [it.bam] }
+}
+
 process SAMTOOLS_INDEX {
     tag "$meta.id"
 
@@ -30,4 +40,12 @@ process SAMTOOLS_INDEX {
     """
     samtools index ${bam}
     """
+}
+
+def call_SAMTOOLS_INDEX(ch) {
+    call_process(SAMTOOLS_INDEX,
+                ch,
+                ["sorted_bam"],
+                [id: { it.sorted_bam.name }],
+                ["sorted_bam_index"]) { [it.sorted_bam] }
 }

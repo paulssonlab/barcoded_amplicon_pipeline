@@ -1,3 +1,5 @@
+include { call_process } from '../functions.nf'
+
 // SEE: https://github.com/nf-core/modules/blob/master/software/bowtie2/build/main.nf
 process BOWTIE2_BUILD {
     tag "$meta.id"
@@ -41,4 +43,12 @@ process BOWTIE2 {
         -x \$INDEX --interleaved ${reads} \
         | samtools view -@ ${task.cpus} -Sbh -o ${meta.id}.bam -) 2> ${meta.id}.bowtie2.log
     """
+}
+
+def call_BOWTIE2(ch) {
+    call_process(BOWTIE2,
+                 ch,
+                 ["reads", "index", "bowtie2_args"],
+                 [id: { it.reads.baseName }],
+                 ["bam", "bowtie2_log"]) { [it.reads, it.index] }
 }
