@@ -87,6 +87,28 @@ workflow PREPARE_REFERENCES {
         .map { get_registry_seqs(references_dir, it) }
         .set { ch_get_registry_seqs }
 
+    // join_map(samples_in, ch_get_registry_seqs, "run_path")
+    //     .set { ch_samples_with_references }
+
+    // call_process_map(ANY2FASTA,
+    //                  ch_samples_with_references,
+    //                  "references",
+    //                  "references") { meta, ref ->
+    //     [meta, ref]
+    // }
+
+    // call_process(BOWTIE2,
+    //              ch,
+    //              ["reads", "index", "bowtie2_args"],
+    //              [id: { it.reads.baseName }],
+    //              ["bam", "bowtie2_log"]) { [it.reads, it.index] }
+    //     .view()
+
+    // MERGE_FASTAS
+    // BOWTIE2_BUILD
+
+    // samples.view()
+
     // UNIQUE REFERENCES (convert to fasta, publishDir)
     ch_get_registry_seqs
         .map { it.values()*.references.sum().unique() }
@@ -123,6 +145,8 @@ workflow PREPARE_REFERENCES {
             edit_map_key(refs, "references", "reference_basenames") { it*.baseName }
         }
         .set { ch_get_registry_seqs_with_basenames }
+
+    // ch_get_registry_seqs_with_basenames.view()
 
     join_map(samples_in, ch_get_registry_seqs_with_basenames, "run_path")
         .set { samples }

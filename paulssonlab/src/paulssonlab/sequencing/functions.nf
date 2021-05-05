@@ -86,17 +86,26 @@ def collect_closures(map, x) {
     map.collectEntries { k, v -> [(k): v(x) ] }
 }
 
-def call_process(process, ch, join_keys, closure_map, output_keys, Closure closure) {
-    def ch_output = ch.map {
+def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, Closure preprocess) {
+    def ch_input = ch.map {
             [[*:it.subMap(join_keys),
-              *:collect_closures(closure_map, it)], *closure(it)]
+              *:collect_closures(closure_map, it)], *preprocess(it)]
         }
-        .unique()
-        | process
-        | map { [remove_keys(it[0], closure_map.keySet()), *it[1..-1]] }
-    def ch_input = ch.map { [it.subMap(join_keys), it] }
-    ch_output.cross(ch_input)
+        //.unique()
+        //| process
+    def ch_output = closure(ch_input).map { [remove_keys(it[0], closure_map.keySet()), *it[1..-1]] }
+    def ch_orig = ch.map { [it.subMap(join_keys), it] }
+    ch_output.cross(ch_orig)
         .map {
             [*:it[1][1], *:[output_keys, it[0][1..-1]].transpose().collectEntries()]
         }
+}
+
+def call_process(process, ch, join_keys, closure_map, output_keys, Closure preprocess) {
+    // TODO: not sure why { process(it.unique()) } doesn't work
+    call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, preprocess)
+}
+
+def call_map_process(process, ch, join_key, closure_map, output_key, Closure closure) {
+    return 0
 }

@@ -17,9 +17,9 @@ workflow ILLUMINA_WHOLE_PLASMID {
 
     main:
     PREPARE_REFERENCES(samples_in)
-    // TODO: use call_process for BOWTIE2_BUILD so can build index with different arguments
     BOWTIE2_BUILD(PREPARE_REFERENCES.out.references)
     MERGE_INDEXES(PREPARE_REFERENCES.out.samples, BOWTIE2_BUILD.out.index)
+    // MERGE_INDEXES.out.samples.view()
 
     call_BOWTIE2(MERGE_INDEXES.out.samples)
         .set { ch_mapped }
