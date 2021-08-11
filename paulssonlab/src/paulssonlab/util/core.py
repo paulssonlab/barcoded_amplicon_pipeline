@@ -2,6 +2,14 @@ from itertools import zip_longest
 from collections import Sequence, Mapping
 
 
+def any_none(*args):
+    return any(a is None for a in args)
+
+
+def any_not_none(*args):
+    return any(a is not None for a in args)
+
+
 def sign(x):
     if x > 0:
         return 1
