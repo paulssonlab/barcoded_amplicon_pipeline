@@ -50,6 +50,17 @@ def first(obj):
     return next(iter(obj))
 
 
+def only(obj, msg="expecting a length-one iterable"):
+    iterator = iter(obj)
+    first_ = next(iterator)
+    try:
+        second_ = next(iterator)
+    except:
+        return first_
+    else:
+        raise ValueError(msg)
+
+
 # FROM: https://stackoverflow.com/questions/42095393/python-map-a-function-over-recursive-iterables/42095505
 # TODO: document!!!
 def recursive_map(
