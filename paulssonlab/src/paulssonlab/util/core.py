@@ -1,5 +1,6 @@
 from itertools import zip_longest
 from collections import Sequence, Mapping
+from numbers import Number
 
 
 def any_none(*args):
@@ -26,6 +27,13 @@ def format_sign(sgn):
         return "-"
     else:
         return "|"  # TODO: is this the most comprehensible symbol?
+
+
+def format_number(fmt, x):
+    if isinstance(x, Number):
+        return fmt.format(x)
+    else:
+        return "{}".format(x)
 
 
 UNEVEN_GROUPS = object()
