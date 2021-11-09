@@ -11,27 +11,73 @@ include { BOWTIE2_BUILD;
 include { call_SAMTOOLS_SORT;
           call_SAMTOOLS_INDEX } from '../../modules/samtools.nf'
 
+process TEST {
+    tag "$meta.id"
+
+    input:
+    tuple val(meta), val(a), val(b)
+
+    output:
+    tuple val(meta), path('x'), path('y')
+
+    script:
+    """
+    echo ${a} + args:${meta.args} + id:${meta.id} > x
+    echo ${b} + args:${meta.args} + id:${meta.id} > y
+    """
+}
+
+// [[meta], [...refs1...], [...refs2...]]
+// .transpose()
+// [val: 1, args: "foo", refs1: "k", refs2: "a"]
+// call_process
+// [val: 1, args: "foo", refs1: "k", refs2: "a", out1: ?, out2: ?]
+
+def map_call_process(process, ch, join_keys, closure_map, map_input_keys, map_output_keys, Closure preprocess) {
+    return 0
+    // def closure = {
+    //     it.map {println x; x}
+    //     // it
+    //     // it.unique() | process
+    //     // it.map {
+    //     //     []
+    //     // }
+    // }
+    // call_closure(closure, ch, join_keys, closure_map, map_output_keys, Closure.IDENTITY)
+}
+
 workflow ILLUMINA_WHOLE_PLASMID {
     take:
     samples_in
 
     main:
-    PREPARE_REFERENCES(samples_in)
-    BOWTIE2_BUILD(PREPARE_REFERENCES.out.references)
-    MERGE_INDEXES(PREPARE_REFERENCES.out.samples, BOWTIE2_BUILD.out.index)
+    ch = Channel.of([[val: 1, args: "foo", refs1: ["k", "kk", "kkk"], refs2: ["a", "aa", "aaa"]],
+                     [val: 2, args: "foo", refs1: ["k", "kk", "kkk"], refs2: ["a", "aa", "aaa"]],
+                     [val: 3, args: "bar", refs1: ["k", "kk", "kkk"], refs2: ["a", "aa", "aaa"]],
+                     [val: 4, args: "bar", refs1: ["l", "ll", "lll"], refs2: ["a", "aa", "aaa"]]])
+    // process, ch, join_keys, closure_map, map_input_key, map_output_keys, Closure preprocess
+    map_call_process(TEST,
+                     ch,
+                     ["args"],
+                     [id: { it.refs }],
+                     ["refs1", "refs2"],
+                     ["out1", "out2"]) { meta -> [meta.refs1, meta.refs2] }
+    // PREPARE_REFERENCES(samples_in)
+    // BOWTIE2_BUILD(PREPARE_REFERENCES.out.references)
+    // MERGE_INDEXES(PREPARE_REFERENCES.out.samples, BOWTIE2_BUILD.out.index)
     // MERGE_INDEXES.out.samples.view()
 
-    call_BOWTIE2(MERGE_INDEXES.out.samples)
-        .set { ch_mapped }
+    // call_BOWTIE2(MERGE_INDEXES.out.samples)
+    //     .set { ch_mapped }
 
-    call_SAMTOOLS_SORT(ch_mapped)
-        .set { ch_sorted }
+    // call_SAMTOOLS_SORT(ch_mapped)
+    //     .set { ch_sorted }
 
-    call_SAMTOOLS_INDEX(ch_sorted)
-        .set { ch_indexed }
+    // call_SAMTOOLS_INDEX(ch_sorted)
+    //     .set { ch_indexed }
 
-    ch_indexed
-        .view()
+    // ch_indexed
+    //     .view()
         // .set { ch_sorted }
 
     // CALL_VARIANTS

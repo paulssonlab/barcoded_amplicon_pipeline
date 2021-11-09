@@ -87,9 +87,13 @@ def collect_closures(map, x) {
 }
 
 def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, Closure preprocess) {
-    def ch_input = ch.map {
-            [[*:it.subMap(join_keys),
-              *:collect_closures(closure_map, it)], *preprocess(it)]
+    def ch_input = ch.map { it ->
+            def join_map = it.subMap(join_keys)
+            // we could use preprocess(it) and collect_closures(..., it) here,
+            // but that would allow the process to depend on information
+            // beyond what's contained in the join keys
+            [[*:join_map,
+              *:collect_closures(closure_map, join_map)], *preprocess(join_map)]
         }
         //.unique()
         //| process
@@ -106,6 +110,23 @@ def call_process(process, ch, join_keys, closure_map, output_keys, Closure prepr
     call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, preprocess)
 }
 
-def call_map_process(process, ch, join_key, closure_map, output_key, Closure closure) {
-    return 0
+// map_call_closure?
+
+def map_call_process(process, ch, join_keys, closure_map, map_input_key, map_output_keys, Closure preprocess) {
+    def closure = {
+        it.map {println x; x}
+        // it
+        // it.unique() | process
+        // it.map {
+        //     []
+        // }
+    }
+    call_closure(closure, ch, join_keys, closure_map, map_output_keys, Closure.IDENTITY)
 }
+
+// [meta]
+// [[meta], [...,ref2,...]]
+// .transpose()
+// [[meta], ref1]
+// preprocess()
+// [[meta], ref1, bowtie2_build_args]
