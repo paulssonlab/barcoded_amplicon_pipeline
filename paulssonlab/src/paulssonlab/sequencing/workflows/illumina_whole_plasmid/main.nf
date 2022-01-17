@@ -11,58 +11,17 @@ include { BOWTIE2_BUILD;
 include { call_SAMTOOLS_SORT;
           call_SAMTOOLS_INDEX } from '../../modules/samtools.nf'
 
-process TEST {
-    tag "$meta.id"
-
-    input:
-    tuple val(meta), val(a), val(b)
-
-    output:
-    tuple val(meta), path('x'), path('y')
-
-    script:
-    """
-    echo ${a} + args:${meta.args} + id:${meta.id} > x
-    echo ${b} + args:${meta.args} + id:${meta.id} > y
-    """
-}
-
-// [[meta], [...refs1...], [...refs2...]]
-// .transpose()
-// [val: 1, args: "foo", refs1: "k", refs2: "a"]
-// call_process
-// [val: 1, args: "foo", refs1: "k", refs2: "a", out1: ?, out2: ?]
-
-def map_call_process(process, ch, join_keys, closure_map, map_input_keys, map_output_keys, Closure preprocess) {
-    return 0
-    // def closure = {
-    //     it.map {println x; x}
-    //     // it
-    //     // it.unique() | process
-    //     // it.map {
-    //     //     []
-    //     // }
-    // }
-    // call_closure(closure, ch, join_keys, closure_map, map_output_keys, Closure.IDENTITY)
-}
-
 workflow ILLUMINA_WHOLE_PLASMID {
     take:
     samples_in
 
     main:
-    ch = Channel.of([[val: 1, args: "foo", refs1: ["k", "kk", "kkk"], refs2: ["a", "aa", "aaa"]],
-                     [val: 2, args: "foo", refs1: ["k", "kk", "kkk"], refs2: ["a", "aa", "aaa"]],
-                     [val: 3, args: "bar", refs1: ["k", "kk", "kkk"], refs2: ["a", "aa", "aaa"]],
-                     [val: 4, args: "bar", refs1: ["l", "ll", "lll"], refs2: ["a", "aa", "aaa"]]])
-    // process, ch, join_keys, closure_map, map_input_key, map_output_keys, Closure preprocess
-    map_call_process(TEST,
-                     ch,
-                     ["args"],
-                     [id: { it.refs }],
-                     ["refs1", "refs2"],
-                     ["out1", "out2"]) { meta -> [meta.refs1, meta.refs2] }
-    // PREPARE_REFERENCES(samples_in)
+    PREPARE_REFERENCES(samples_in)
+
+    // [reads_path:4309_APA4309_321712w_AE5.fastq, param_set:default, reads_prefix:4309_APA4309_321712w_AE5, reference_names:[pLIB219, pLIB220], name:4309_APA4309_321712w_AE5, id:0, run_path:default/4309_APA4309_321712w_AE5, reads:/tmp/paulssonlab-sequencing/200806_arkin_bistable_sequencing/data/4309_APA4309_321712w_AE5.fastq, references:[/tmp/paulssonlab-sequencing/200806_arkin_bistable_sequencing/data/references/pLIB219.gb, /tmp/paulssonlab-sequencing/200806_arkin_bistable_sequencing/data/references/pLIB220.gb]]
+    // [reads_path:4310_APA4310_321712w_AE6.fastq, param_set:default, reads_prefix:4310_APA4310_321712w_AE6, reference_names:[pLIB219, pLIB222], name:4310_APA4310_321712w_AE6, id:1, run_path:default/4310_APA4310_321712w_AE6, reads:/tmp/paulssonlab-sequencing/200806_arkin_bistable_sequencing/data/4310_APA4310_321712w_AE6.fastq, references:[/tmp/paulssonlab-sequencing/200806_arkin_bistable_sequencing/data/references/pLIB219.gb, /tmp/paulssonlab-sequencing/200806_arkin_bistable_sequencing/data/references/pLIB222.gb]]
+    // [reads_path:4311_APA4311_321712w_AE7.fastq, param_set:default, reads_prefix:4311_APA4311_321712w_AE7, reference_names:[pLIB221, pLIB222], name:4311_APA4311_321712w_AE7, id:2, run_path:default/4311_APA4311_321712w_AE7, reads:/tmp/paulssonlab-sequencing/200806_arkin_bistable_sequencing/data/4311_APA4311_321712w_AE7.fastq, references:[/tmp/paulssonlab-sequencing/200806_arkin_bistable_sequencing/data/references/pLIB221.gb, /tmp/paulssonlab-sequencing/200806_arkin_bistable_sequencing/data/references/pLIB222.gb]]
+
     // BOWTIE2_BUILD(PREPARE_REFERENCES.out.references)
     // MERGE_INDEXES(PREPARE_REFERENCES.out.samples, BOWTIE2_BUILD.out.index)
     // MERGE_INDEXES.out.samples.view()
@@ -88,8 +47,8 @@ workflow ILLUMINA_WHOLE_PLASMID {
 
     // TODO: fix /tmp/.../tmp issue
 
-    // emit:
-    // samples
+    //emit:
+    //samples
 
 }
 

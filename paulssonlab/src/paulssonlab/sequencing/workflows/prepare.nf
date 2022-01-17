@@ -91,13 +91,15 @@ workflow PREPARE_REFERENCES {
     join_map(samples_in, ch_get_registry_seqs, "run_path")
         .set { ch_samples_with_references }
 
-    map_call_process(ANY2FASTA,
-                     ch_samples_with_references,
-                     ["references"],
-                     [id: { "0" }],
-                     "references",
-                     ["references_fasta"]) { meta, ref -> [meta, ref] }
-        .view()
+    ch_samples_with_references.view()
+
+    // map_call_process(ANY2FASTA,
+    //                  ch_samples_with_references,
+    //                  ["references"],
+    //                  [id: { "0" }],
+    //                  "references",
+    //                  ["references_fasta"]) { meta, ref -> [meta, ref] }
+    //     .view()
 
     // call_process(BOWTIE2,
     //              ch,
