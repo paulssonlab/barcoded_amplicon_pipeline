@@ -8,7 +8,7 @@ process BOWTIE2_BUILD {
     tuple val(meta), path(fasta)
 
     output:
-    tuple val(meta), path('bowtie2'), emit: index
+    tuple val(meta), path('bowtie2')
 
     conda "${params.conda_env_dir}/mapping.yml"
 
