@@ -1,5 +1,5 @@
 from itertools import zip_longest
-from collections import Sequence, Mapping
+from collections.abc import Sequence, Mapping
 from numbers import Number
 
 
