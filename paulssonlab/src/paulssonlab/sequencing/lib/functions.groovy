@@ -1,11 +1,11 @@
 import java.nio.file.Paths
 import nextflow.util.CsvParser
 
-def file_in_dir(dir, filename) {
+static def file_in_dir(dir, filename) {
     file(Paths.get(dir as String, filename as String))
 }
 
-def scp(remote_path, dest_path) {
+static def scp(remote_path, dest_path) {
     def dest = file(dest_path)
     if (!dest.exists()) {
         def dest_parent = dest.getParent()
@@ -33,7 +33,7 @@ def scp(remote_path, dest_path) {
     return dest
 }
 
-def read_tsv(path) {
+static def read_tsv(path) {
     def parser = new CsvParser()
         .setSeparator('\t')
     def data = []
@@ -44,26 +44,46 @@ def read_tsv(path) {
     return data
 }
 
+// equivalent Groovy's GStringImpl and Java's String do not hash to the same value
+// so mismatches can cause problems be used as keys in HashMaps, cross, join_key, etc.
+// this function converts all GStringImpl's to String and leaves all other objects unchanged
+static def stringify(str) {
+    (str instanceof GString) ? str.toString() : str
+}
+
+// equivalent to ch_a.cross(ch_b) but optionally allows stringifying keys
+static def cross(ch_a, ch_b, stringify_keys = true) {
+    println "stringifying: $stringify_keys"
+    if (stringify_keys) {
+        ch_a = ch_a.map { [stringify(it[0]), *it[1..-1]] }
+        ch_b = ch_b.map { [stringify(it[0]), *it[1..-1]] }
+    }
+    ch_a.cross(ch_b)
+}
+
 // ch_a should be a channel containing maps of format [old_key_a:value_to_join_on, ...]
 // ch_b should be a channel containing lists of format [key, value, ignored...]
 // output will be same as ch_a but with old_key renamed to new_key
 // and its corresponding value mapped according to the [key, value] lookup table of ch_b
-def join_key(ch_a, ch_b, old_key, new_key) {
-    ch_b.cross(ch_a.map { [it[old_key], it] } ).map { [*:it[1][1], (new_key): it[0][1]] }
+static def join_key(ch_a, ch_b, old_key, new_key, stringify_keys = true) {
+    cross(ch_b, ch_a.map { [it[old_key], it] }, stringify_keys).map { [*:it[1][1], (new_key): it[0][1]] }
 }
 
 // ch_a should be a channel containing maps of format [old_key_a:value_to_join_on, ...]
 // same as join_key but ch_b contains lists of format [[old_key_b:value_to_join_on, ...], new_value, ignored...]
 // each list is first mapped to a list [k, v] by indexing into id_map with old_key_b
-def join_key2(ch_a, ch_b, old_key_a, old_key_b, new_key) {
-    join_key(ch_a, ch_b.map { [it[0][old_key_b], it[1]] }, old_key_a, new_key)
+static def join_key2(ch_a, ch_b, old_key_a, old_key_b, new_key, stringify_keys = true) {
+    join_key(ch_a, ch_b.map { [it[0][old_key_b], it[1]] }, old_key_a, new_key, stringify_keys)
 }
 
 // each value in ch_a is intepreted as a map of lists of values to join on,
 // and each value of that list is mapped according to the [key, value] lookup table of ch_b
-def join_each(ch_a, ch_b, old_key, new_key) {
+static def join_each(ch_a, ch_b, old_key, new_key, stringify_keys = true) {
+    if (stringify_keys) {
+        ch_b = ch_b.map { it.collectEntries { k, v -> [(stringify(k)): v] } }
+    }
     ch_a.combine(ch_b).map { a, b ->
-        [*:a, (new_key): a[old_key].collect { b.get(it) }]
+        [*:a, (new_key): a[old_key].collect { b.get(stringify_keys ? stringify(it) : it) }]
     }
 }
 
@@ -71,9 +91,12 @@ def join_each(ch_a, ch_b, old_key, new_key) {
 // ch_map is a channel which contains a single value
 // which should be a map [val1:map1, val2:map2, val3:map3, ...]
 // the map corresponding to value_to_join_on is merged with the original map from ch_entries
-def join_map(ch_entries, ch_map, key) {
+static def join_map(ch_entries, ch_map, key, stringify_keys = true) {
+    if (stringify_keys) {
+        ch_map = ch_map.map { it.collectEntries { k, v -> [(stringify(k)): v] } }
+    }
     ch_entries.combine(ch_map).map { entry, map ->
-        [*:entry, *:map.getOrDefault(entry[key], [:])]
+        [*:entry, *:map.getOrDefault(stringify_keys ? stringify(entry[key]) : entry[key], [:])]
     }
 }
 
@@ -85,7 +108,7 @@ def join_map(ch_entries, ch_map, key) {
 // this may be a limitation of nextflow functions (is there a difference?),
 // and real Groovy functions (defined in a .groovy file)
 // and/or typed functions may work
-def edit_map_key(map, old_key, new_key, Closure closure) {
+static def edit_map_key(map, old_key, new_key, Closure closure) {
     map.collectEntries { k, v ->
         def value = [*:v, (new_key): closure(v.get(old_key))]
         [(k): value]
@@ -93,7 +116,7 @@ def edit_map_key(map, old_key, new_key, Closure closure) {
 }
 
 // removes keys from map
-def remove_keys(map, keys) {
+static def remove_keys(map, keys) {
     def new_map = map.clone()
     new_map.keySet().removeAll(keys)
     new_map
@@ -102,13 +125,13 @@ def remove_keys(map, keys) {
 // map should be a map [k1:closure1, k2:closure2, ...]
 // returns a map [k1:closure1(x), k2:closure2(x), ...]
 // for some fixed value x
-def collect_closures(map, x) {
-    map.collectEntries { k, v -> [(k): v(x) ] }
+static def collect_closures(map, x) {
+    map.collectEntries { k, v -> [(k): v(x)] }
 }
 
 // see below. call_closure is the same as call_process except it does not uniquify the channel
 // sent to the process.
-def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, Closure preprocess) {
+static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, stringify_keys = true, Closure preprocess) {
     def ch_input = ch.map { it ->
             def join_map_ = it.subMap(join_keys)
             // we could use preprocess(it) and collect_closures(..., it) here,
@@ -119,7 +142,7 @@ def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, Closu
         }
     def ch_output = closure(ch_input).map { [remove_keys(it[0], closure_map.keySet()), *it[1..-1]] }
     def ch_orig = ch.map { [it.subMap(join_keys), it] }
-    ch_output.cross(ch_orig)
+    cross(ch_output, ch_orig, stringify_keys)
         .map {
             [*:it[1][1], *:[output_keys, it[0][1..-1]].transpose().collectEntries()]
         }
@@ -134,14 +157,13 @@ def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, Closu
 // closure_map is a way of adding additional keys to meta derived from only the information
 // in join_keys. the purpose is to allow using processes that expect extra keys in meta
 // without having to modify the process itself.
-def call_process(process, ch, join_keys, closure_map, output_keys, Closure preprocess) {
+static def call_process(process, ch, join_keys, closure_map, output_keys, stringify_keys = true, Closure preprocess) {
     // TODO: not sure why { process(it.unique()) } doesn't work
-    call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, preprocess)
+    call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, stringify_keys, preprocess)
 }
 
-// map_call_closure?
-
-def map_call_process(process, ch, join_keys, closure_map, map_input_key, map_output_keys, Closure preprocess) {
+// TODO
+static def map_call_process(process, ch, join_keys, closure_map, map_input_key, map_output_keys, stringify_keys = true, Closure preprocess) {
     def closure = {
         it.map {println x; x}
         // it
@@ -150,5 +172,5 @@ def map_call_process(process, ch, join_keys, closure_map, map_input_key, map_out
         //     []
         // }
     }
-    call_closure(closure, ch, join_keys, closure_map, map_output_keys, Closure.IDENTITY)
+    call_closure(closure, ch, join_keys, closure_map, map_output_keys, stringify_keys, Closure.IDENTITY)
 }
