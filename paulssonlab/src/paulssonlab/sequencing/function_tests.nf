@@ -120,7 +120,9 @@ process DUMMY_PROCESS_INDEX {
 
 workflow MAP_CALL_PROCESS {
     ch = Channel.fromList([[val: 1, args: "foo", input2: "hhh", refs: ["k", "kk"]],
-                           [val: 2, args: "foo", input2: "hhh", refs: ["k", "l"]]])
+                           [val: 2, args: "foo", input2: "hhh", refs: ["k", "l"]],
+                           [val: 3, args: "bar", input2: "hhh", refs: ["k", "kk", "l"]],
+                           [val: 4, args: "bar", input2: "hhh", refs: ["l", "kk", "k"]]])
     // ch = Channel.fromList([[val: 1, args: "foo", input2: "hhh", refs: ["k", "kk", "kkk"]],
     //                        [val: 2, args: "foo", input2: "hhh", refs: ["k", "kk", "kkk"]],
     //                        [val: 3, args: "bar", input2: "hhh", refs: ["k", "kk", "kkk", "l"]],

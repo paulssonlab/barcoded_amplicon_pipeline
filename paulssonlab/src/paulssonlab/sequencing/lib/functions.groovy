@@ -168,45 +168,53 @@ static def uuid() {
 
 // TODO
 static def map_call_process(process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, Closure preprocess) {
-    // join_keys = [*join_keys, map_input_key]
+    def temp_uuids_key = "${temp_key}_uuids"
+    def temp_mapped_value_key = "${temp_key}_mapped_value"
     def ch_input_untransposed = ch.map { it ->
             def collection_to_map = it.getOrDefault(map_input_key, [])
             // TODO: include collection in groupKey!
             // construct groupKeys here??
-            [it, collection_to_map.size(), collection_to_map]
+            [groupKey(uuid(), collection_to_map.size()), it, collection_to_map]
         }
     def ch_input_transposed = ch_input_untransposed.transpose(by: 2)
-    def ch_input_transposed_with_key = ch_input_transposed.map { map, size, mapped_value ->
+    def ch_input_transposed_with_key = ch_input_transposed.map { key, map, mapped_value ->
         // this is the map that is passed as the first argument to the process
         // (additional keys are added according to closure_map)
         def join_map_ = map.subMap(join_keys)
         // this is the map that is passed to the closures (preprocess and values of closure_map)
         def closure_input_map = map.subMap([*join_keys, map_input_key])
-        // we could use preprocess(it) and collect_closures(..., it) here,
-        // but that would allow the process to depend on information
-        // beyond what's contained in the join keys
-        def process_map = [*:join_map_, *:collect_closures(closure_map, mapped_value, closure_input_map)]
+        // note that the closures (preprocess and values of closure_map) can in principle
+        // depend on the collection we're mapping over (specified by map_input_key)
+        // but that these dependencies may prevent deduplicating process calls
+        def process_map = [*:join_map_, *:collect_closures(closure_map, mapped_value, closure_input_map),
+                           (temp_mapped_value_key):mapped_value]
         def process_input = [process_map, *preprocess(mapped_value, closure_input_map)]
-        [process_input, groupKey(closure_input_map, size)]
+        [process_input, key]
     }
     def ch_process_groups = ch_input_transposed_with_key.groupTuple(by: 0)
     def ch_process_input = ch_process_groups.map { process_input, keys ->
-        [[*:process_input[0], (temp_key):keys], *process_input[1..-1]]
+        [[*:process_input[0], (temp_uuids_key):keys], *process_input[1..-1]]
     }
     // TODO: process!
     def ch_process_output = ch_process_input.map { [it[0], it[1] + "out", it[2] + "out"] }
     def ch_output_untransposed = ch_process_output.map {
-        [it[0].get(temp_key), it]
+        [it[0].get(temp_uuids_key), it]
     }
-    ch_output_untransposed
-    // def ch_output_transposed = ch_output_untransposed.transpose(by: 0)
-    // ch_output_transposed
-    // ch_process_output
-    // ch_output
-    // def ch_output = closure(ch_input).map { [remove_keys(it[0], closure_map.keySet()), *it[1..-1]] }
-    // def ch_orig = ch.map { [it.subMap(join_keys), it] }
-    // cross(ch_output, ch_orig, stringify_keys)
-    //     .map {
-    //         [*:it[1][1], *:[output_keys, it[0][1..-1]].transpose().collectEntries()]
-    //     }
+    // ch_output_untransposed
+    def ch_output_transposed = ch_output_untransposed.transpose(by: 0)
+    def ch_output_grouped = ch_output_transposed.groupTuple(by: 0)
+    // remove keys (groupKeys of UUIDs) from input/output tuples
+    def ch_output_joined = ch_input_untransposed.cross(ch_output_grouped).map { input, output ->
+        [input[1], output[1]]
+    }
+    def ch_output = ch_output_joined.map { input, output ->
+        def outputs_by_mapped_values = output.collectEntries { [(it[0].get(temp_mapped_value_key)): it[1..-1]] }
+        def new_output = output_keys.withIndex().collectEntries { output_key, idx ->
+            [(output_key): input.get(map_input_key).collect { mapped_value ->
+                outputs_by_mapped_values.get(mapped_value)[idx]
+                }]
+        }
+        [*:input, *:new_output]
+    }
+    ch_output
 }
