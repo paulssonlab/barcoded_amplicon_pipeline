@@ -119,16 +119,20 @@ process DUMMY_PROCESS_INDEX {
 }
 
 workflow MAP_CALL_PROCESS {
-    ch = Channel.fromList([[val: 1, args: "foo", refs1: ["k", "kk"], refs2: ["a", "aa", "aaa"]],
-                           [val: 2, args: "foo", refs1: ["kk", "kkk"], refs2: ["a", "aa", "aaa"]],
-                           [val: 3, args: "bar", refs1: ["k", "kk", "kkk", "l"], refs2: ["a", "aa", "aaa"]],
-                           [val: 4, args: "bar", refs1: ["l", "ll", "lll"], refs2: ["a", "aa", "aaa", "b"]]])
+    ch = Channel.fromList([[val: 1, args: "foo", input2: "hhh", refs: ["k", "kk"]],
+                           [val: 2, args: "foo", input2: "hhh", refs: ["k", "l"]]])
+    // ch = Channel.fromList([[val: 1, args: "foo", input2: "hhh", refs: ["k", "kk", "kkk"]],
+    //                        [val: 2, args: "foo", input2: "hhh", refs: ["k", "kk", "kkk"]],
+    //                        [val: 3, args: "bar", input2: "hhh", refs: ["k", "kk", "kkk", "l"]],
+    //                        [val: 4, args: "bar", input2: "hhh", refs: ["k", "l", "ll", "lll"]],
+    //                        [val: 5, args: "cat", input2: "hhh", refs: ["k", "l", "ll", "lll"]]])
     // args: process, ch, join_keys, closure_map, map_input_key, map_output_keys, Closure preprocess
-    map_call_process(DUMMY_PROCESS,
+    map_call_process(DUMMY_PROCESS_INDEX,
                      ch,
-                     ["args"],
-                     [id: { it.refs }],
-                     "refs1",
-                     ["out1", "out2"]) { meta -> [meta.refs1, meta.refs2] }
+                     ["args", "input2"],
+                     [id: { ref, meta -> ref }],
+                     "refs",
+                     ["out1", "out2"],
+                     "_dummy_process_index") { ref, meta -> [ref, meta.input2] }
         .view()
 }
