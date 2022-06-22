@@ -215,8 +215,7 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
         // we have to store the list of UUIDs in the map so that we have it in the process output
         [[*:process_input[0], (temp_uuids_key):keys], *process_input[1..-1]]
     }
-    // TODO: process!
-    def ch_process_output = ch_process_input.map { [it[0], it[1] + "out", it[2] + "out"] }
+    def ch_process_output = ch_process_input | process
     // we need to pull out the list of UUIDs and put it in a tuple so we can transpose
     def ch_output_untransposed = ch_process_output.map {
         [it[0].get(temp_uuids_key), it]
