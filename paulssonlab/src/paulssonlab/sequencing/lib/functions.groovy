@@ -148,7 +148,7 @@ static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys
         }
 }
 
-// preprocess takes each map from ch, removing all keys except for join_keys, and outputs a list
+// preprocess takes each map from ch (with all keys removed except for join_keys) and outputs a list
 // that's used as input into the process
 // a map containing only join_keys will be prepended to this list before sending it to the channel
 // process should take this as its first input and pass it through as its first output
@@ -166,7 +166,13 @@ static def uuid() {
     UUID.randomUUID().toString()
 }
 
-// TODO
+// this works like call_process but for each input map emitted by ch, it will call process
+// for each value in a collection (i.e., list) in the input map under map_input_key
+// all arguments work similarly to those for call_process, the only difference is that
+// closure_map and preprocess are allowed to depend on the mapped collection
+// and not just the mapped value itself, although this may prevent deduplicating process calls
+// temp_key is an arbitrary unique string and is used as a prefix for keys that are
+// temporarily added to the map that is passed through process
 static def map_call_process(process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, Closure preprocess) {
     // the key we use to store the list of UUIDs we use when joining input channel and process output channel
     def temp_uuids_key = "${temp_key}_uuids"
