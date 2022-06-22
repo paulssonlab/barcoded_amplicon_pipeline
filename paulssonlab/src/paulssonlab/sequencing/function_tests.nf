@@ -89,19 +89,6 @@ workflow CALL_PROCESS {
     // [val:4, input1:bar, input2:c, args:bar2, blah:8, out1:/tmp/nextflow/df/d874813693851e31d3d42f117e374b/x, out2:/tmp/nextflow/df/d874813693851e31d3d42f117e374b/y]
 }
 
-//def map_call_process(process, ch, join_keys, closure_map, map_input_keys, map_output_keys, Closure preprocess) {
-//    return 0
-    // def closure = {
-    //     it.map {println x; x}
-    //     // it
-    //     // it.unique() | process
-    //     // it.map {
-    //     //     []
-    //     // }
-    // }
-    // call_closure(closure, ch, join_keys, closure_map, map_output_keys, Closure.IDENTITY)
-//}
-
 process DUMMY_PROCESS_INDEX {
     tag "$meta.id"
 
@@ -111,28 +98,23 @@ process DUMMY_PROCESS_INDEX {
     output:
     tuple val(meta), path('x'), path('y')
 
-    // sleep \$[ ( \$RANDOM % 10 )  + 1 ]s
     script:
     """
-    echo x input1:${input1} + input2:${input2} + args:${meta.args} + id:${meta.id} > x
-    echo y input1:${input1} + input2:${input2} + args:${meta.args} + id:${meta.id} > y
+    sleep \$[ ( \$RANDOM % ${meta.max_sleep} )  + 1 ]s
+    echo x input1:${input1} + input2:${input2} + max_sleep:${meta.max_sleep} + id:${meta.id} > x
+    echo y input1:${input1} + input2:${input2} + max_sleep:${meta.max_sleep} + id:${meta.id} > y
     """
 }
 
 workflow MAP_CALL_PROCESS {
-    ch = Channel.fromList([[val: 1, args: "foo", input2: "hhh", refs: ["k", "kk"]],
-                           [val: 2, args: "foo", input2: "hhh", refs: ["k", "l"]],
-                           [val: 3, args: "bar", input2: "hhh", refs: ["k", "kk", "l"]],
-                           [val: 4, args: "bar", input2: "hhh", refs: ["l", "kk", "k"]]])
-    // ch = Channel.fromList([[val: 1, args: "foo", input2: "hhh", refs: ["k", "kk", "kkk"]],
-    //                        [val: 2, args: "foo", input2: "hhh", refs: ["k", "kk", "kkk"]],
-    //                        [val: 3, args: "bar", input2: "hhh", refs: ["k", "kk", "kkk", "l"]],
-    //                        [val: 4, args: "bar", input2: "hhh", refs: ["k", "l", "ll", "lll"]],
-    //                        [val: 5, args: "cat", input2: "hhh", refs: ["k", "l", "ll", "lll"]]])
-    // args: process, ch, join_keys, closure_map, map_input_key, map_output_keys, Closure preprocess
+    ch = Channel.fromList([[val: 1, max_sleep: 3, input2: "hhh", refs: ["k", "kk"]],
+                           [val: 2, max_sleep: 3, input2: "hhh", refs: ["k", "l"]],
+                           [val: 3, max_sleep: 20, input2: "hhh", refs: ["k", "kk", "l"]],
+                           [val: 4, max_sleep: 20, input2: "hhh", refs: ["l", "kk", "k"]]])
+    // args: process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, Closure preprocess
     map_call_process(DUMMY_PROCESS_INDEX,
                      ch,
-                     ["args", "input2"],
+                     ["max_sleep", "input2"],
                      [id: { ref, meta -> ref }],
                      "refs",
                      ["out1", "out2"],
