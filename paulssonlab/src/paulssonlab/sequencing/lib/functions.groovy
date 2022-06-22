@@ -168,14 +168,20 @@ static def uuid() {
 
 // TODO
 static def map_call_process(process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, Closure preprocess) {
+    // the key we use to store the list of UUIDs we use when joining input channel and process output channel
     def temp_uuids_key = "${temp_key}_uuids"
+    // the key we use to store mapped value for each process input. this is used to ensure
+    // that the order of values in output collections corresponds to the order of values
+    // in the input collection
     def temp_mapped_value_key = "${temp_key}_mapped_value"
-    def ch_input_untransposed = ch.map { it ->
+    // ch is a channel emitting maps
+    def ch_input_untransposed = ch.map {
             def collection_to_map = it.getOrDefault(map_input_key, [])
-            // TODO: include collection in groupKey!
-            // construct groupKeys here??
+            // we need to use groupKey to wrap the UUID so that the second groupTuple invokation
+            // (ch_output_transposed.groupTuple) knows how many elements to expect for each UUID
             [groupKey(uuid(), collection_to_map.size()), it, collection_to_map]
         }
+    // transpose over collection (all tuples for a given collection get the same UUID)
     def ch_input_transposed = ch_input_untransposed.transpose(by: 2)
     def ch_input_transposed_with_key = ch_input_transposed.map { key, map, mapped_value ->
         // this is the map that is passed as the first argument to the process
@@ -186,34 +192,49 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
         // note that the closures (preprocess and values of closure_map) can in principle
         // depend on the collection we're mapping over (specified by map_input_key)
         // but that these dependencies may prevent deduplicating process calls
+        // process_map, which is the first item in the tuple passed as input to the process,
+        // includes the values in join_map_, the output of collect_closures,
+        // as well as mapped_value
         def process_map = [*:join_map_, *:collect_closures(closure_map, mapped_value, closure_input_map),
                            (temp_mapped_value_key):mapped_value]
+        // preprocess is a closure that returns a tuple of all additional inputs to the process
+        // besides process_map
         def process_input = [process_map, *preprocess(mapped_value, closure_input_map)]
         [process_input, key]
     }
+    // we want to get a list of UUIDs for each unique process_input
+    // (so that we can reuse output for identical computations)
     def ch_process_groups = ch_input_transposed_with_key.groupTuple(by: 0)
     def ch_process_input = ch_process_groups.map { process_input, keys ->
+        // we have to store the list of UUIDs in the map so that we have it in the process output
         [[*:process_input[0], (temp_uuids_key):keys], *process_input[1..-1]]
     }
     // TODO: process!
     def ch_process_output = ch_process_input.map { [it[0], it[1] + "out", it[2] + "out"] }
+    // we need to pull out the list of UUIDs and put it in a tuple so we can transpose
     def ch_output_untransposed = ch_process_output.map {
         [it[0].get(temp_uuids_key), it]
     }
-    // ch_output_untransposed
     def ch_output_transposed = ch_output_untransposed.transpose(by: 0)
+    // groupTuple will emit each output collection
+    // because we are using groupTuple with groupKeys that have their sizes specified, this channel
+    // will emit as soon as all output elements for an input collection are ready
     def ch_output_grouped = ch_output_transposed.groupTuple(by: 0)
-    // remove keys (groupKeys of UUIDs) from input/output tuples
+    // join the inputs (with UUIDs) and the outputs
     def ch_output_joined = ch_input_untransposed.cross(ch_output_grouped).map { input, output ->
+        // remove UUIDs from input/output tuples
         [input[1], output[1]]
     }
     def ch_output = ch_output_joined.map { input, output ->
+        // make a map from input_value => (output1, output2, ...)
         def outputs_by_mapped_values = output.collectEntries { [(it[0].get(temp_mapped_value_key)): it[1..-1]] }
+        // make output collections ordered according to the input collection
         def new_output = output_keys.withIndex().collectEntries { output_key, idx ->
             [(output_key): input.get(map_input_key).collect { mapped_value ->
                 outputs_by_mapped_values.get(mapped_value)[idx]
                 }]
         }
+        // merge new output keys into map
         [*:input, *:new_output]
     }
     ch_output

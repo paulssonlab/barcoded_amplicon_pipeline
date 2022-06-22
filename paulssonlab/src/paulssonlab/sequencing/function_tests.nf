@@ -111,6 +111,7 @@ process DUMMY_PROCESS_INDEX {
     output:
     tuple val(meta), path('x'), path('y')
 
+    // sleep \$[ ( \$RANDOM % 10 )  + 1 ]s
     script:
     """
     echo x input1:${input1} + input2:${input2} + args:${meta.args} + id:${meta.id} > x
