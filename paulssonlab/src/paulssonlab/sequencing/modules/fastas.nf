@@ -1,4 +1,4 @@
-import java.nio.file.Paths
+import static functions.*
 
 process ANY2FASTA {
     tag "$meta.id"
@@ -15,7 +15,7 @@ process ANY2FASTA {
 
     shell:
     '''
-    any2fasta -q !{input} | seqkit replace -p '(.*)' -r '!{meta.id}' > !{meta.id}.fasta
+    any2fasta -q !{input} | seqkit replace -p '(.*)' -r '!{meta.id}' > !{input.baseName}.fasta
     '''
 }
 
@@ -26,11 +26,11 @@ process MERGE_FASTAS {
     tuple val(meta), path('seq')
 
     output:
-    tuple val(meta), path('reference.fasta')
+    tuple val(meta), path('merged.fasta')
 
     script:
     """
-    cat seq* > reference.fasta
+    cat seq* > merged.fasta
     """
 }
 

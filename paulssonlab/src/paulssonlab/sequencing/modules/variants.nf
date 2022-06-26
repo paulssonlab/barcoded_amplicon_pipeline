@@ -1,3 +1,5 @@
+import static functions.*
+
 process CALL_VARIANTS {
     tag "$meta.id"
 

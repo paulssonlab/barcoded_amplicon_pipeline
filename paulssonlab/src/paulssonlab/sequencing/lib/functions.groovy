@@ -1,5 +1,6 @@
 import java.nio.file.Paths
 import nextflow.util.CsvParser
+import static nextflow.Nextflow.file
 import static nextflow.Nextflow.groupKey
 
 static def file_in_dir(dir, filename) {
@@ -21,7 +22,7 @@ static def scp(remote_path, dest_path) {
         def command = ['scp', remote_path.replaceAll(' ', '\\\\ '), dest_path]
         def proc = command.execute()
         //def proc = ['scp', "\"${remote_path}\"", dest_path].execute()
-        def outputStream = new StringBuffer();
+        def outputStream = new StringBuffer()
         proc.waitForProcessOutput(outputStream, System.err)
         //proc.waitForProcessOutput(System.out, System.err)
         //return outputStream.toString()
@@ -185,7 +186,8 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
             def collection_to_map = it.getOrDefault(map_input_key, [])
             // we need to use groupKey to wrap the UUID so that the second groupTuple invokation
             // (ch_output_transposed.groupTuple) knows how many elements to expect for each UUID
-            [groupKey(uuid(), collection_to_map.size()), it, collection_to_map]
+            // note that Nextflow's transpose operator requires that the collection be a List
+            [groupKey(uuid(), collection_to_map.size()), it, collection_to_map as List]
         }
     // transpose over collection (all tuples for a given collection get the same UUID)
     def ch_input_transposed = ch_input_untransposed.transpose(by: 2)

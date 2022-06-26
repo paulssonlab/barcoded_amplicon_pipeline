@@ -1,4 +1,4 @@
-include { call_process } from '../functions.nf'
+import static functions.*
 
 process SAMTOOLS_SORT {
     tag "$meta.id"

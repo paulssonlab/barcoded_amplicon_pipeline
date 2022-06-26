@@ -2,14 +2,15 @@ import java.nio.file.Paths
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
-include { scp;
-          join_key;
-          join_key2;
-          join_each;
-          join_map;
-          edit_map_key;
-          file_in_dir;
-          map_call_process } from '../functions.nf'
+import static functions.*
+// include { scp;
+//           join_key;
+//           join_key2;
+//           join_each;
+//           join_map;
+//           edit_map_key;
+//           file_in_dir;
+//           map_call_process } from '../functions.nf'
 
 include { ANY2FASTA;
           MERGE_FASTAS } from '../modules/fastas.nf'
@@ -91,84 +92,22 @@ workflow PREPARE_REFERENCES {
     join_map(samples_in, ch_get_registry_seqs, "run_path")
         .set { ch_samples_with_references }
 
-    ch_samples_with_references.view()
+    map_call_process(ANY2FASTA,
+                     ch_samples_with_references,
+                     ["references"],
+                     [id: { ref, meta -> ref.baseName }],
+                     "references",
+                     ["references_fasta"],
+                     "_ANY2FASTA") { ref, meta -> [ref] }
+        .set { ch_samples_with_fastas }
 
-    // map_call_process(ANY2FASTA,
-    //                  ch_samples_with_references,
-    //                  ["references"],
-    //                  [id: { "0" }],
-    //                  "references",
-    //                  ["references_fasta"]) { meta, ref -> [meta, ref] }
-    //     .view()
-
-    // call_process(BOWTIE2,
-    //              ch,
-    //              ["reads", "index", "bowtie2_args"],
-    //              [id: { it.reads.baseName }],
-    //              ["bam", "bowtie2_log"]) { [it.reads, it.index] }
-    //     .view()
-
-    // MERGE_FASTAS
-    // BOWTIE2_BUILD
-
-    // samples.view()
-
-    // // UNIQUE REFERENCES (convert to fasta, publishDir)
-    // ch_get_registry_seqs
-    //     .map { it.values()*.references.sum().unique() }
-    //     .flatMap { it.collect { f -> [[id: f.baseName], f] } }
-    //     .set { ch_references_orig_format }
-
-    // ch_references_orig_format
-    //     | ANY2FASTA
-    //     | set { ch_references_fasta }
-
-    // ch_references_fasta
-    //     .map { [(it[0].id): it[1]] }
-    //     .collect()
-    //     .map { it.sum() }
-    //     .set { ch_references_fasta_map }
-
-    // // UNIQUE REFERENCE_SETS (merge fasta)
-    // ch_get_registry_seqs
-    //     .flatMap { it.values()*.references.unique()*.collect { f -> f.baseName } }
-    //     .map { [id: it, references: it] }
-    //     .set { ch_reference_sets_orig_format }
-
-    // join_each(ch_reference_sets_orig_format, ch_references_fasta_map, "references", "references")
-    //     .map { [[id: it.id], it.references] }
-    //     .set { ch_reference_sets }
-
-    // // TODO: replace below here with call_process/join_process?
-
-    // MERGE_FASTAS(ch_reference_sets)
-    //     .set { ch_merged_references }
-
-    // ch_get_registry_seqs
-    //     .map { refs ->
-    //         edit_map_key(refs, "references", "reference_basenames") { it*.baseName }
-    //     }
-    //     .set { ch_get_registry_seqs_with_basenames }
-
-    // // ch_get_registry_seqs_with_basenames.view()
-
-    // join_map(samples_in, ch_get_registry_seqs_with_basenames, "run_path")
-    //     .set { samples }
-
-    // emit:
-    // samples
-    // references = ch_merged_references
-}
-
-workflow MERGE_INDEXES {
-    take:
-    samples_in
-    indexes_in
-
-    main:
-    join_key2(samples_in, indexes_in, "reference_names", "id", "index")
-        .set { ch_samples_indexed }
+    call_process(MERGE_FASTAS,
+                 ch_samples_with_fastas,
+                 "references_fasta",
+                 [id: { it.references_fasta }],
+                 ["reference"]) { [it.references_fasta] }
+        .set { samples }
 
     emit:
-    samples = ch_samples_indexed
+    samples
 }
