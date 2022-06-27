@@ -35,19 +35,29 @@ process MERGE_FASTAS {
 }
 
 process EXTRACT_CONSENSUS {
-    tag "$meta.id"
+    // TODO: I think we can remove this (and the below)
+    // tag "$meta.id"
 
     input:
     tuple val(meta), path(fasta)
 
     output:
-    tuple val(meta), path("*.consensus"), path("*.log")
+    tuple val(meta), path("consensus"), path("*.log")
 
     conda "${params.conda_env_dir}/mapping.yml"
 
     script:
     """
-    (cat ${fasta} | seqkit replace -p '^(\\S+).*' -r '!{meta.id}_\$1'
-     | seqkit split - --by-id -f -O ${meta.id}.consensus) 2> ${meta.id}.extract_consensus.log
+    (cat ${fasta} | seqkit replace -p '^(\\S+).*' -r '\$1' \
+     | seqkit split - --by-id -f -O consensus) 2> extract_consensus.log
     """
+}
+
+def call_EXTRACT_CONSENSUS(ch) {
+    call_process(EXTRACT_CONSENSUS,
+                ch,
+                ["consensus"],
+                // [id: { it.consensus.baseName }],
+                [:],
+                ["consensus_extracted"]) { [it.consensus] }
 }

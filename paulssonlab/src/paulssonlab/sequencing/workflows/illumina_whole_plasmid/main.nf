@@ -7,8 +7,13 @@ include { PREPARE_SAMPLE_SHEET;
 include { call_BOWTIE2_BUILD;
           call_BOWTIE2_ALIGN } from '../../modules/bowtie2.nf'
 
-include { call_SAMTOOLS_SORT;
-          call_SAMTOOLS_INDEX } from '../../modules/samtools.nf'
+include { call_SAMTOOLS_INDEX } from '../../modules/samtools.nf'
+include { call_CALL_VARIANTS;
+          call_FILTER_VARIANTS;
+          call_INDEX_VARIANTS;
+          call_GET_CONSENSUS } from '../../modules/variants.nf'
+
+include { call_EXTRACT_CONSENSUS } from '../../modules/fastas.nf'
 
 workflow ILLUMINA_WHOLE_PLASMID {
     take:
@@ -18,46 +23,29 @@ workflow ILLUMINA_WHOLE_PLASMID {
     PREPARE_REFERENCES(samples_in)
         | call_BOWTIE2_BUILD
         | call_BOWTIE2_ALIGN
-        | view
-    // call_BOWTIE2_BUILD(PREPARE_REFERENCES.out)
-    //     .view()
+        | call_SAMTOOLS_INDEX
+        | call_CALL_VARIANTS
+        | call_FILTER_VARIANTS
+        | call_INDEX_VARIANTS
+        | call_GET_CONSENSUS
+        | call_EXTRACT_CONSENSUS
+        | set { samples }
 
-    // BOWTIE2_BUILD(PREPARE_REFERENCES.out.references)
-    // MERGE_INDEXES(PREPARE_REFERENCES.out.samples, BOWTIE2_BUILD.out.index)
-    // MERGE_INDEXES.out.samples.view()
-
-    // call_BOWTIE2(MERGE_INDEXES.out.samples)
-    //     .set { ch_mapped }
-
-    // call_SAMTOOLS_SORT(ch_mapped)
-    //     .set { ch_sorted }
-
-    // call_SAMTOOLS_INDEX(ch_sorted)
-    //     .set { ch_indexed }
-
-    // ch_indexed
-    //     .view()
-        // .set { ch_sorted }
-
-    // CALL_VARIANTS
-    // FILTER_VARIANTS
-    // INDEX_VARIANTS (?)
-    // GET_CONSENSUS
-    // EXTRACT_CONSENSUS
-
-    // TODO: fix /tmp/.../tmp issue
-
-    //emit:
-    //samples
+    emit:
+    samples
 
 }
 
 workflow MAIN {
-    PREPARE_SAMPLE_SHEET().samples
+    PREPARE_SAMPLE_SHEET()
         // map reads_prefix to reads_path
         .map { [reads_path: "${it.reads_prefix}.fastq", *:it] }
         | PREPARE_READS
         | ILLUMINA_WHOLE_PLASMID
+        | set { samples }
+
+    emit:
+    samples
 }
 
 workflow {
