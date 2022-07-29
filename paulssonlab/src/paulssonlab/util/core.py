@@ -1,6 +1,7 @@
 from itertools import zip_longest
 from collections.abc import Sequence, Mapping
 from numbers import Number
+from cytoolz import partial, compose
 
 
 def any_none(*args):
@@ -39,6 +40,7 @@ def format_number(fmt, x):
 UNEVEN_GROUPS = object()
 
 # TODO: what does this fancy version even do?? document!!!
+# TODO: steal better version from recipes, or find in a library
 # FROM: https://docs.python.org/3/library/itertools.html#recipes
 def grouper(iterable, n, fillvalue=UNEVEN_GROUPS):
     """Collect data into fixed-length chunks or blocks."""
@@ -60,7 +62,10 @@ def first(obj):
 
 def only(obj, msg="expecting a length-one iterable"):
     iterator = iter(obj)
-    first_ = next(iterator)
+    try:
+        first_ = next(iterator)
+    except:
+        raise ValueError(msg)
     try:
         second_ = next(iterator)
     except:
