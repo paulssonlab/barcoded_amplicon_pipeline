@@ -8,6 +8,7 @@ include { call_BOWTIE2_BUILD;
           call_BOWTIE2_ALIGN } from '../../modules/bowtie2.nf'
 
 include { call_SAMTOOLS_INDEX } from '../../modules/samtools.nf'
+
 include { call_CALL_VARIANTS;
           call_FILTER_VARIANTS;
           call_INDEX_VARIANTS;
@@ -15,7 +16,7 @@ include { call_CALL_VARIANTS;
 
 include { call_EXTRACT_CONSENSUS } from '../../modules/fastas.nf'
 
-workflow ILLUMINA_WHOLE_PLASMID {
+workflow ILLUMINA {
     take:
     samples_in
 
@@ -41,7 +42,7 @@ workflow MAIN {
         // map reads_prefix to reads_path
         .map { [reads_path: "${it.reads_prefix}.fastq", *:it] }
         | PREPARE_READS
-        | ILLUMINA_WHOLE_PLASMID
+        | ILLUMINA
         | set { samples }
 
     emit:

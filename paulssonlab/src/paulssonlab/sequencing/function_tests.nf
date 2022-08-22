@@ -1,5 +1,3 @@
-nextflow.enable.dsl=2
-
 import static functions.*
 
 workflow JOIN_KEY {
