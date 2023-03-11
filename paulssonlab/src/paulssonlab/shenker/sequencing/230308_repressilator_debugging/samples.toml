@@ -1,0 +1,8 @@
+tsv = """\
+name	min_size	max_size	ratio
+foo	1	2	0.77
+blah	3	4	0.0
+"""
+
+#[[samples]]
+#references = "pLT500"

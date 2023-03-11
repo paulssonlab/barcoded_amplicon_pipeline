@@ -15,20 +15,6 @@ import static functions.*
 include { ANY2FASTA;
           MERGE_FASTAS } from '../modules/fastas.nf'
 
-workflow PREPARE_SAMPLE_SHEET {
-    main:
-    def sample_sheet_path = Paths.get(params.data_dir, params.sample_sheet_name)
-    def remote_path = Paths.get(params.remote_path_base, params.remote_path)
-    scp("${remote_path}/${params.sample_sheet_name}", sample_sheet_path)
-    def sample_list = SampleSheetParser.load(sample_sheet_path as String)
-    Channel
-        .fromList(sample_list)
-        .set { samples }
-
-    emit:
-    samples
-}
-
 workflow PREPARE_READS {
     take:
     samples_in

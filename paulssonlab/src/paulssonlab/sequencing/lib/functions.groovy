@@ -2,6 +2,7 @@ import java.nio.file.Paths
 import nextflow.util.CsvParser
 import static nextflow.Nextflow.file
 import static nextflow.Nextflow.groupKey
+import static nextflow.Nextflow.Channel
 
 static def file_in_dir(dir, filename) {
     file(Paths.get(dir as String, filename as String))
@@ -44,6 +45,22 @@ static def read_tsv(path) {
         data << parser.parse(line)
     }
     return data
+}
+
+static def get_samples(params, defaults = [:], substitute = true) {
+// static def get_samples(params) {
+    def sample_sheet_path
+    // not sure why we need to define this here, error otherwise:
+    // cause: Variable `Paths` already defined in the process scope @ line 25, column 27.
+    def remote_path
+    if (params?.samples) {
+        sample_sheet_path = params.samples
+    } else {
+        sample_sheet_path = Paths.get(params.data_dir, params.sample_sheet_name)
+        remote_path = Paths.get(params.remote_path_base, params.remote_path)
+        scp("${remote_path}/${params.sample_sheet_name}", sample_sheet_path)
+    }
+    return SampleSheetParser.load(sample_sheet_path as String, defaults, substitute)
 }
 
 // equivalent Groovy's GStringImpl and Java's String do not hash to the same value
