@@ -23,10 +23,10 @@ process MERGE_FASTAS {
     tag "$meta.id"
 
     input:
-    tuple val(meta), path('seq')
+    tuple val(meta), path("seq")
 
     output:
-    tuple val(meta), path('merged.fasta')
+    tuple val(meta), path("merged.fasta")
 
     script:
     """
@@ -44,7 +44,7 @@ process EXTRACT_CONSENSUS {
     output:
     tuple val(meta), path("consensus"), path("*.log")
 
-    conda "${params.conda_env_dir}/mapping.yml"
+    conda "${params.conda_env_dir}/seqkit.yml"
 
     script:
     """

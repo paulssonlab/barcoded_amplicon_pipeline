@@ -1,6 +1,6 @@
 import static functions.*
 
-// SEE: https://github.com/nf-core/modules/blob/master/modules/bowtie2/build/main.nf
+// SEE: https://github.com/nf-core/modules/blob/master/modules/nf-core/bowtie2/build/main.nf
 process BOWTIE2_BUILD {
     tag "$meta.id"
 
@@ -8,9 +8,9 @@ process BOWTIE2_BUILD {
     tuple val(meta), path(fasta)
 
     output:
-    tuple val(meta), path('bowtie2')
+    tuple val(meta), path("bowtie2")
 
-    conda "${params.conda_env_dir}/mapping.yml"
+    conda "${params.conda_env_dir}/bowtie2.yml"
 
     script:
     """
@@ -27,7 +27,7 @@ def call_BOWTIE2_BUILD(ch) {
                  ["index"]) { [it.reference] }
 }
 
-// SEE: https://github.com/nf-core/modules/blob/master/modules/bowtie2/align/main.nf
+// SEE: https://github.com/nf-core/modules/blob/master/modules/nf-core/bowtie2/align/main.nf
 process BOWTIE2_ALIGN {
     tag "$meta.id"
 
@@ -35,23 +35,23 @@ process BOWTIE2_ALIGN {
     tuple val(meta), path(reads), path(index)
 
     output:
-    tuple val(meta), path('*.bam'), path('*.log')
+    tuple val(meta), path("*.bam"), path("*.log")
 
-    conda "${params.conda_env_dir}/mapping.yml"
+    conda "${params.conda_env_dir}/bowtie2.yml"
 
     script:
     // TODO: copy nf-core to implement non-interleaved modes: -1 aaa_1.fastq -2 aaa_2.fastq / -U aaa.fastq
-    def bowtie2_args = meta.bowtie2_args ?: "--end-to-end"
+    def bowtie2_align_args = meta.bowtie2_align_args ?: "--end-to-end"
     def samtools_command = meta.getOrDefault("sort_bam", true) ? "sort" : "view"
     """
     INDEX=`find -L ./ -name "*.rev.1.bt2" | sed "s/.rev.1.bt2//"`
     [ -z "\$INDEX" ] && INDEX=`find -L ./ -name "*.rev.1.bt2l" | sed "s/.rev.1.bt2l//"`
     [ -z "\$INDEX" ] && echo "Bowtie2 index files not found" 1>&2 && exit 1
 
-    (bowtie2 \
-        --threads ${task.cpus} \
-        ${bowtie2_args} \
-        -x \$INDEX --interleaved ${reads} \
+    (bowtie2 \\
+        --threads ${task.cpus} \\
+        ${bowtie2_align_args} \\
+        -x \$INDEX --interleaved ${reads} \\
         | samtools ${samtools_command} --threads ${task.cpus} -o ${meta.id}.bam -) 2> ${meta.id}.bowtie2.log
     """
 }
@@ -59,7 +59,7 @@ process BOWTIE2_ALIGN {
 def call_BOWTIE2_ALIGN(ch) {
     call_process(BOWTIE2_ALIGN,
                  ch,
-                 ["reads", "index", "bowtie2_args", "sort_bam"],
+                 ["reads", "index", "bowtie2_align_args", "sort_bam"],
                  [id: { it.reads.baseName }],
                  ["bam", "bowtie2_log"]) { [it.reads, it.index] }
 }

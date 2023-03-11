@@ -9,7 +9,7 @@ process CALL_VARIANTS {
     output:
     tuple val(meta), path("*.bcf"), path("*.log")
 
-    conda "${params.conda_env_dir}/mapping.yml"
+    conda "${params.conda_env_dir}/bcftools.yml"
 
     script:
     def bcftools_mpileup_args = meta.bcftools_mpileup_args ?: "--max-depth 2000 --max-idepth 2000"
@@ -38,7 +38,7 @@ process FILTER_VARIANTS {
     output:
     tuple val(meta), path("*.bcf"), path("*.log")
 
-    conda "${params.conda_env_dir}/mapping.yml"
+    conda "${params.conda_env_dir}/bcftools.yml"
 
     script:
     def bcftools_filter_args = meta.bcftools_filter_args ?: "-i'%QUAL>20'"
@@ -64,7 +64,7 @@ process INDEX_VARIANTS {
     output:
     tuple val(meta), path("*.csi")
 
-    conda "${params.conda_env_dir}/mapping.yml"
+    conda "${params.conda_env_dir}/bcftools.yml"
 
     script:
     """
@@ -89,7 +89,7 @@ process GET_CONSENSUS {
     output:
     tuple val(meta), path("consensus.fasta"), path("*.log")
 
-    conda "${params.conda_env_dir}/mapping.yml"
+    conda "${params.conda_env_dir}/bcftools.yml"
 
     script:
     """

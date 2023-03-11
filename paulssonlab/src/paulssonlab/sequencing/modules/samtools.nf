@@ -9,7 +9,7 @@ process SAMTOOLS_INDEX {
     output:
     tuple val(meta), path("${bam.name}.bai")
 
-    conda "${params.conda_env_dir}/mapping.yml"
+    conda "${params.conda_env_dir}/samtools.yml"
 
     script:
     """
@@ -34,7 +34,7 @@ process SAMTOOLS_FAIDX {
     output:
     tuple val(meta), path("${fasta.name}.fai")
 
-    conda "${params.conda_env_dir}/mapping.yml"
+    conda "${params.conda_env_dir}/samtools.yml"
 
     script:
     """
