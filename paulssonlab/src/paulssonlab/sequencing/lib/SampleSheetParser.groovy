@@ -59,6 +59,9 @@ class SampleSheetParser {
         def runs = paramSets.collectMany { p ->
             samples.collect { s -> [*:defaults, *:p, *:s] }
         }
+        if (anyDuplicates(samples*.name)) {
+            throw new Exception("Samples must have unique names")
+        }
         def engine = new groovy.text.SimpleTemplateEngine()
         runs.eachWithIndex { it, index ->
             it.id = index
@@ -66,7 +69,7 @@ class SampleSheetParser {
             it.replaceAll { k, v ->
                 try {
                     v = new BigDecimal(v)
-                } catch (NumberFormatException nfe) {}
+                } catch (NumberFormatException e) {}
                 if (v instanceof String && (substitute == true || (substitute instanceof Collection && k in substitute))) {
                     engine.createTemplate(v).make(meta).toString()
                 } else {
