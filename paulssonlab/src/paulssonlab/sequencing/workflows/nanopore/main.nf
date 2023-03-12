@@ -1,7 +1,6 @@
 import static functions.*
 
-include { PREPARE_READS;
-          PREPARE_REFERENCES } from '../prepare.nf'
+include { PREPARE_REFERENCES } from '../prepare.nf'
 
 include { call_MINIMAP2_INDEX;
           call_MINIMAP2_ALIGN } from '../../modules/minimap2.nf'
@@ -20,7 +19,7 @@ workflow NANOPORE {
     samples_in
 
     main:
-    PREPARE_REFERENCES(samples_in)
+    samples_in
         | call_MINIMAP2_INDEX
         // | call_MINIMAP2_ALIGN
         // | call_SAMTOOLS_INDEX
@@ -39,12 +38,13 @@ workflow NANOPORE {
 }
 
 workflow MAIN {
-    Channel.fromList(get_samples(params, [fastq: '${name}/*.fastq*', fast5: '${name}/*.fast5'], true))
-    // Channel.fromList(get_samples(params, [fastq: '${name}/*.fastq*', fast5: '${name}/*.fast5'], true))
-        // map reads_prefix to reads_path
-        // .map { [reads_path: "${it.reads_prefix}.fastq", *:it] }
-        | view
+    download_data(params)
+    get_samples(params)
+    // Channel.fromList(stage_inputs(get_samples(params), ["fastq", "fast5", "pod5"])
+        // TODO: make PREPARE_INPUTS a workflow that takes an argument
         // | PREPARE_READS
+        // | PREPARE_REFERENCES
+        | view
         // | NANOPORE
         // | set { samples }
 

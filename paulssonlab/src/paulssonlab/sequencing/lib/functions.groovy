@@ -1,36 +1,49 @@
 import java.nio.file.Paths
+import java.nio.file.Files
 import nextflow.util.CsvParser
 import static nextflow.Nextflow.file
 import static nextflow.Nextflow.groupKey
-import static nextflow.Nextflow.Channel
+import nextflow.Channel
 
 static def file_in_dir(dir, filename) {
     file(Paths.get(dir as String, filename as String))
 }
 
-static def scp(remote_path, dest_path) {
+static boolean is_dir_empty(dir) {
+    try {
+        def dir_stream = Files.newDirectoryStream(dir)
+        return !dir_stream.iterator().hasNext()
+    } catch (Exception e) {
+        return true
+    }
+}
+
+static def download_data(params) {
+    def remote_path = Paths.get(params.remote_path_base, params.remote_path)
+    rsync(remote_path, params.data_dir)
+}
+
+static def rsync(remote_path, dest_path) {
     def dest = file(dest_path)
-    if (!dest.exists()) {
-        def dest_parent = dest.getParent()
-        if (!dest_parent.exists()) {
-            dest_parent.mkdirs()
+    if (is_dir_empty(dest)) {
+        if (!dest.exists()) {
+            dest.mkdirs()
         }
         // SEE: https://stackoverflow.com/questions/25300550/difference-in-collecting-output-of-executing-external-command-in-groovy
         // and https://stackoverflow.com/questions/159148/groovy-executing-shell-commands
         // without escaping spaces, would need -T to deal with scp quoted source paths
         // SEE: https://stackoverflow.com/questions/54598689/scp-fails-with-protocol-error-filename-does-not-match-request
         // not sure why I need two backslashes to escape spaces
-        def command = ['scp', remote_path.replaceAll(' ', '\\\\ '), dest_path]
+        def command = ['rsync', '-az', (remote_path as String).replaceAll(' ', '\\\\ ') + "/", dest_path]
         def proc = command.execute()
-        //def proc = ['scp', "\"${remote_path}\"", dest_path].execute()
         def outputStream = new StringBuffer()
         proc.waitForProcessOutput(outputStream, System.err)
         //proc.waitForProcessOutput(System.out, System.err)
         //return outputStream.toString()
         if ((proc.exitValue() != 0) || (!dest.exists())) {
-            println "scp failed with output:"
+            println "rsync failed with output:"
             println outputStream.toString()
-            throw new Exception("scp of '${remote_path}' to '${dest_path}' failed")
+            throw new Exception("rync of '${remote_path}' to '${dest_path}' failed")
         }
     }
     return dest
@@ -57,10 +70,9 @@ static def get_samples(params, defaults = [:], substitute = true) {
         sample_sheet_path = params.samples
     } else {
         sample_sheet_path = Paths.get(params.data_dir, params.sample_sheet_name)
-        remote_path = Paths.get(params.remote_path_base, params.remote_path)
-        scp("${remote_path}/${params.sample_sheet_name}", sample_sheet_path)
     }
-    return SampleSheetParser.load(sample_sheet_path as String, defaults, substitute)
+    def sample_list = SampleSheetParser.load(sample_sheet_path as String, defaults, substitute)
+    return Channel.fromList(sample_list)
 }
 
 // equivalent Groovy's GStringImpl and Java's String do not hash to the same value
