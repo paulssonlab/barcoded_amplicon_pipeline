@@ -3,37 +3,9 @@ import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
 import static functions.*
-// include { scp;
-//           join_key;
-//           join_key2;
-//           join_each;
-//           join_map;
-//           edit_map_key;
-//           file_in_dir;
-//           map_call_process } from '../functions.nf'
 
 include { ANY2FASTA;
           MERGE_FASTAS } from '../modules/fastas.nf'
-
-workflow PREPARE_READS {
-    take:
-    samples_in
-
-    main:
-    def remote_path = Paths.get(params.remote_path_base, params.remote_path)
-    samples_in
-        .map { it.reads_path }
-        .unique()
-        .map {
-           [it, scp("${remote_path}/${it}", Paths.get(params.data_dir, it))]
-        }
-        .set { ch_reads }
-    join_key(samples_in, ch_reads, "reads_path", "reads")
-        .set { samples }
-
-    emit:
-    samples
-}
 
 def json_command(command, input) {
     def SCRIPT_TIMEOUT = 100000 // msec

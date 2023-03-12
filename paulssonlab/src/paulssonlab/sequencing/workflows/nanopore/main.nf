@@ -38,11 +38,9 @@ workflow NANOPORE {
 }
 
 workflow MAIN {
-    download_data(params)
-    get_samples(params)
-    // Channel.fromList(stage_inputs(get_samples(params), ["fastq", "fast5", "pod5"])
-        // TODO: make PREPARE_INPUTS a workflow that takes an argument
-        // | PREPARE_READS
+    // println glob("*.fastq.gz", "/tmp/paulssonlab-sequencing/230308_repressilator_debugging/data")
+    // download_data(params)
+    glob_inputs(get_samples(params), params.data_dir, ["fastq", "fast5", "pod5"])
         // | PREPARE_REFERENCES
         | view
         // | NANOPORE

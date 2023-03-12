@@ -1,8 +1,21 @@
 tsv = """\
-name	min_size	max_size	ratio
-foo	1	2	0.77
-blah	3	4	0.0
+sample	references	min_read_size	max_read_size
+NAO691_01	pLT691	-	-
+NAO691_01	pLT691	9800	12000
+NAO692_02	pLT692	-	-
+NAO692_02	pLT692	2600	2800
+NAO692_02	pLT692	4800	5200
+NAO692_02	pLT692	9800	12000
+NAO693_03	pLT693	-	-
+NAO693_03	pLT693	2700	2900
+NAO693_03	pLT693	4800	5100
+NAO693_03	pLT693	9000	9200
+NAO693_03	pLT693	9800	12000
+NAO699a_04	pLT699	-	-
+NAO699b_05	pLT699	-	-
+NAO699c_06	pLT699	-	-
 """
 
-#[[samples]]
-#references = "pLT500"
+[[params]]
+name = "${sample}_${min_read_size ?: 'na'}_to_${max_read_size ?: 'na'}"
+fastq = "${sample}.fastq.gz"

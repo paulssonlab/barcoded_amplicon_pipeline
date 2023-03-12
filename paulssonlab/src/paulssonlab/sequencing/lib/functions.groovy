@@ -1,5 +1,6 @@
 import java.nio.file.Paths
 import java.nio.file.Files
+import java.nio.file.FileSystems
 import nextflow.util.CsvParser
 import static nextflow.Nextflow.file
 import static nextflow.Nextflow.groupKey
@@ -47,6 +48,28 @@ static def rsync(remote_path, dest_path) {
         }
     }
     return dest
+}
+
+static def glob(pattern, base) {
+    def paths = []
+    def path_matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern)
+    base = file(base).toAbsolutePath()
+    Files.walk(base).forEach { path ->
+        path = base.relativize(path)
+        if (path_matcher.matches(path)) {
+            paths << path
+        }
+    }
+    return paths
+}
+
+static def glob_inputs(ch, base, input_names) {
+    ch.map { it ->
+        input_names.each { k ->
+            it[k] = it.get(k) ? glob(it[k], base) : []
+        }
+        it
+    }
 }
 
 static def read_tsv(path) {

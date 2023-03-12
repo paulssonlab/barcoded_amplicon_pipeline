@@ -37,6 +37,7 @@ class SampleSheetParser {
             def header
             tsv.eachLine { line ->
                 def parsedLine = tsvParser.parse(line)
+                parsedLine = parsedLine.collect { it =~ /\s*-\s*/ ? "" : it }
                 if (!header) {
                     header = parsedLine
                 } else {
@@ -48,19 +49,18 @@ class SampleSheetParser {
             }
         }
         def samplesTable = sampleSheet.get("samples")
-        if (tsv && samplesTable) {
-            throw new Exception("Cannot specify both tsv and samples in sample sheet TOML")
-        }
         samplesTable?.each {
             samples << it
         }
-        def paramSets = sampleSheet.getOrDefault("params", [[name: "default"]])
-        paramSets.each { renameKey(it, "name", "param_set", "default") }
+        def paramSets = sampleSheet.getOrDefault("params", [[run_path: "default"]])
+        paramSets = paramSets.collect {
+            [run_path: "default", *:it]
+        }
+        if (anyDuplicates(paramSets*.run_path)) {
+            throw new Exception("Param sets must have unique run paths")
+        }
         def runs = paramSets.collectMany { p ->
             samples.collect { s -> [*:defaults, *:p, *:s] }
-        }
-        if (anyDuplicates(samples*.name)) {
-            throw new Exception("Samples must have unique names")
         }
         def engine = new groovy.text.SimpleTemplateEngine()
         runs.eachWithIndex { it, index ->
@@ -76,10 +76,10 @@ class SampleSheetParser {
                     v
                 }
             }
-            it.run_path = Paths.get(it.param_set, it["name"]) as String
+            it.run_path = Paths.get(it.run_path, it["name"]) as String
         }
-        if (anyDuplicates(runs*.name)) {
-            throw new Exception("Runs must have unique names")
+        if (anyDuplicates(runs*.run_path)) {
+            throw new Exception("Runs must have unique run paths")
         }
         return runs
     }
