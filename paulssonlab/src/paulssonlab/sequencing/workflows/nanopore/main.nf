@@ -38,8 +38,7 @@ workflow NANOPORE {
 }
 
 workflow MAIN {
-    // println glob("*.fastq.gz", "/tmp/paulssonlab-sequencing/230308_repressilator_debugging/data")
-    // download_data(params)
+    download_data(params)
     glob_inputs(get_samples(params), params.data_dir, ["fastq", "fast5", "pod5"])
         // | PREPARE_REFERENCES
         | view

@@ -5,6 +5,12 @@ import nextflow.util.CsvParser
 import static nextflow.Nextflow.file
 import static nextflow.Nextflow.groupKey
 import nextflow.Channel
+import groovy.transform.Field // SEE: https://stackoverflow.com/a/31301183
+
+
+
+@Field static final normal = "\033[0;0m"
+@Field static final bold = "\033[0;1m"
 
 static def file_in_dir(dir, filename) {
     file(Paths.get(dir as String, filename as String))
@@ -21,7 +27,9 @@ static boolean is_dir_empty(dir) {
 
 static def download_data(params) {
     def remote_path = Paths.get(params.remote_path_base, params.remote_path)
+    println "${bold}Downloading data from${normal} ${remote_path}"
     rsync(remote_path, params.data_dir)
+    println "${bold}Done.${normal}"
 }
 
 static def rsync(remote_path, dest_path) {
@@ -38,11 +46,11 @@ static def rsync(remote_path, dest_path) {
         def command = ['rsync', '-az', (remote_path as String).replaceAll(' ', '\\\\ ') + "/", dest_path]
         def proc = command.execute()
         def outputStream = new StringBuffer()
-        proc.waitForProcessOutput(outputStream, System.err)
+        proc.waitForProcessOutput(outputStream, outputStream)
         //proc.waitForProcessOutput(System.out, System.err)
         //return outputStream.toString()
         if ((proc.exitValue() != 0) || (!dest.exists())) {
-            println "rsync failed with output:"
+            println "${bold}rsync failed with output:${normal}"
             println outputStream.toString()
             throw new Exception("rync of '${remote_path}' to '${dest_path}' failed")
         }
