@@ -104,6 +104,8 @@ if __name__ == "__main__":
     reg = None
     retry = 1
     for key, references in samples.items():
+        if not references:
+            continue
         output[key] = {"references": [], "reference_exprs": []}
         if re.match(r"^\s*(?:/|\.|\.\.)", references):
             # SEE: https://stackoverflow.com/a/21107911
@@ -111,24 +113,18 @@ if __name__ == "__main__":
                 source_path = Path(source_path.strip()).resolve()
                 dest_filename = f"{source_path.stem}_{hash_str(str(source_path))}{source_path.suffix}"
                 dest_path = output_dir / dest_filename
-                # print("!", dest_path, "|", output_dir, ">", sys.argv[2])
                 if not dest_path.exists():
                     shutil.copyfile(source_path, dest_path)
                 output[key]["references"].append(str(dest_path))
                 output[key]["reference_exprs"].append(str(source_path))
         else:
-            continue
             exprs = parse_references(references)
             for expr in exprs:
                 while True:
                     try:
-                        expr = exprs_to_get[-1]
-                        expr_str = expr_strs[expr]
-                        filename = filenames[expr]
-                        output_path = output_dir / filename
-                        if output_path.exists():
-                            exprs_to_get.pop()
-                            continue
+                        filename_stem = name_for_expr(expr)
+                        if output_dir.glob(filename_stem + ".*"):
+                            break
                         print(
                             f"Fetching registry sequence '{expr_str}'... ",
                             end=None,
@@ -136,10 +132,9 @@ if __name__ == "__main__":
                         )
                         if reg is None:
                             reg = get_registry(config_dir)
-                        get_registry_seq(reg, name, output_path)
-                        exprs_to_get.pop()
-                        dest_filename = 0
-                        output[key].append(dest_filename)
+                        filename = get_registry_seq(reg, name, output_path)
+                        output[key]["references"].append(filename)
+                        output[key]["reference_exprs"].append(unparse_expr(expr))
                         print("done.", file=sys.stderr)
                         break
                     except Exception as e:
@@ -151,17 +146,5 @@ if __name__ == "__main__":
                         retry += 1
                         print(f"Retrying (attempt {retry})...", file=sys.stderr)
                         time.sleep(RETRY_DELAY * retry)
-
-    ########
-    # keys_to_exprs = {}
-    # exprs_to_get = set()
-    # for key, references in samples.items():
-    #     exprs = parse_references(references)
-    #     keys_to_exprs[key] = exprs
-    #     exprs_to_get.update(exprs)
-    # expr_strs = {e: unparse_expr(e) for e in exprs_to_get}
-    # names = {e: f"{name_for_expr(e)}.gb" for e in exprs_to_get}
-    # exprs_to_get = list(exprs_to_get)
-    #####
     json.dump(output, sys.stdout)
     print()  # add newline

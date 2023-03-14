@@ -20,7 +20,7 @@ workflow NANOPORE {
 
     main:
     samples_in
-        | call_MINIMAP2_INDEX
+        // | call_MINIMAP2_INDEX
         // | call_MINIMAP2_ALIGN
         // | call_SAMTOOLS_INDEX
         // | call_CALL_VARIANTS
@@ -38,21 +38,19 @@ workflow NANOPORE {
 }
 
 workflow MAIN {
-    main:
     download_data(params)
     samples_preglob = get_samples(params, [:], true) {
         if (it.get("ignore_references")) {
-            it.references = []
+            it.references = ""
         }
     }
     glob_inputs(samples_preglob, params.data_dir, ["fastq", "fast5", "pod5"])
         | PREPARE_REFERENCES
-        | view
-        // | NANOPORE
-        // | set { samples }
+        | NANOPORE
+        | set { samples }
 
-    // emit:
-    // samples
+    emit:
+    samples
 }
 
 workflow {
