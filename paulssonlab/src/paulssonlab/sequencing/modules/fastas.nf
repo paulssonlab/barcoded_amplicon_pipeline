@@ -9,14 +9,14 @@ process ANY2FASTA {
     output:
     tuple val(meta), path("${meta.id}.fasta")
 
-    publishDir "${params.output_dir}/${params.references_dir}"
+    publishDir params.references_dir, mode: "copy"
 
     conda "${params.conda_env_dir}/any2fasta.yml"
 
-    shell:
-    '''
-    any2fasta -q !{input} | seqkit replace -p '(.*)' -r '!{meta.id}' > !{input.baseName}.fasta
-    '''
+    script:
+    """
+    any2fasta -q ${input} | seqkit replace -p '(.*)' -r '${meta.id}' > ${input.baseName}.fasta
+    """
 }
 
 process MERGE_FASTAS {
