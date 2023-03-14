@@ -237,15 +237,18 @@ static def uuid() {
 // and not just the mapped value itself, although this may prevent deduplicating process calls
 // temp_key is an arbitrary unique string and is used as a prefix for keys that are
 // temporarily added to the map that is passed through process
-static def map_call_process(process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, Closure preprocess) {
+static def map_call_process(process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, pass_empty = true, Closure preprocess) {
     // the key we use to store the list of UUIDs we use when joining input channel and process output channel
     def temp_uuids_key = "${temp_key}_uuids"
     // the key we use to store mapped value for each process input. this is used to ensure
     // that the order of values in output collections corresponds to the order of values
     // in the input collection
     def temp_mapped_value_key = "${temp_key}_mapped_value"
-    // ch is a channel emitting maps
-    def ch_input_untransposed = ch.map {
+    // ch is a channel emitting maps. some of these items may contains empty collections.
+    // these items disappear when we transpose, below. as such, we filter them out.
+    // if pass_empty is true, we mixthem to ch_output before returning
+    def ch_input_nonempty = ch.filter { it.getOrDefault(map_input_key, []).size() != 0 }
+    def ch_input_untransposed = ch_input_nonempty.map {
             def collection_to_map = it.getOrDefault(map_input_key, [])
             // we need to use groupKey to wrap the UUID so that the second groupTuple invokation
             // (ch_output_transposed.groupTuple) knows how many elements to expect for each UUID
@@ -307,5 +310,13 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
         // merge new output keys into map
         [*:input, *:new_output]
     }
-    ch_output
+    if (pass_empty) {
+        // add items with empty collections to output channel
+        // we could add an empty list to each item keyed under output_key,
+        // but this probably is not helpful
+        def ch_input_empty = ch.filter { it.getOrDefault(map_input_key, []).size() == 0 }
+        ch_output.mix(ch_input_empty)
+    } else {
+        ch_output
+    }
 }

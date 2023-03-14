@@ -46,6 +46,7 @@ workflow MAIN {
     }
     glob_inputs(samples_preglob, params.data_dir, ["fastq", "fast5", "pod5"])
         | PREPARE_REFERENCES
+        | map { renameKey(it, "fastq", "reads") }
         | NANOPORE
         | set { samples }
 

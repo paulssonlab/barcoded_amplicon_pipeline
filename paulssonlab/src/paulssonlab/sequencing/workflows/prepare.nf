@@ -4,8 +4,7 @@ import groovy.json.JsonOutput
 
 import static functions.*
 
-include { ANY2FASTA;
-          MERGE_FASTAS } from '../modules/fastas.nf'
+include { ANY2FASTA; MERGE_FILES } from '../modules/fastas.nf'
 
 def json_command(command, input) {
     def SCRIPT_TIMEOUT = 100000 // msec
@@ -59,12 +58,19 @@ workflow PREPARE_REFERENCES {
                      "_ANY2FASTA") { ref, meta -> [ref] }
         .set { ch_samples_with_fastas }
 
-    call_process(MERGE_FASTAS,
-                 ch_samples_with_fastas,
+    def samples_filtered_by_ref = ch_samples_with_fastas.branch {
+        ref: it.get("references_fasta")
+        noref: true
+    }
+
+    call_process(MERGE_FILES,
+                 samples_filtered_by_ref.ref,
                  "references_fasta",
                  [id: { it.references_fasta }],
-                 ["reference"]) { [it.references_fasta] }
+                 ["reference"]) { [it.references_fasta, "fasta"] }
+        .mix(samples_filtered_by_ref.noref)
         .set { samples }
+
 
     emit:
     samples
