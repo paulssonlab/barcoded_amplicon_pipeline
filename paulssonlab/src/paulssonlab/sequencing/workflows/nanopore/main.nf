@@ -40,7 +40,7 @@ workflow NANOPORE {
 workflow MAIN {
     download_data(params)
     glob_inputs(get_samples(params), params.data_dir, ["fastq", "fast5", "pod5"])
-        // | PREPARE_REFERENCES
+        | PREPARE_REFERENCES
         | view
         // | NANOPORE
         // | set { samples }

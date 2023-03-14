@@ -12,7 +12,7 @@ def json_command(command, input) {
     def json_input = JsonOutput.toJson(input)
     def proc = command.execute()
     def output_stream = new StringBuffer();
-    proc.consumeProcessOutput(output_stream, System.err)
+    proc.consumeProcessOutput(output_stream, output_stream)
     proc.withWriter { writer ->
         writer.write(json_input)
     }
@@ -41,7 +41,7 @@ workflow PREPARE_REFERENCES {
     main:
     def references_dir = Paths.get(params.references_dir)
     samples_in
-        .map { [(it.run_path): it.reference_names] }
+        .map { [(it.run_path): it.references] }
         .collect()
         .map { it.sum() }
         .map { get_registry_seqs(references_dir, it) }
