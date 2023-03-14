@@ -28,6 +28,11 @@ process MERGE_FASTAS {
     output:
     tuple val(meta), path("merged.fasta")
 
+    // SEE: https://github.com/nextflow-io/nextflow/discussions/2813
+    // MERGE_FASTAS is run for each unique reference list, not for each
+    // run_path, so we need a separate process to publish merged FASTAS
+    // publishDir { meta.run_output_dir }, mode: "copy"
+
     script:
     """
     cat seq* > merged.fasta

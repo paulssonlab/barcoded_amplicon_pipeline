@@ -100,7 +100,9 @@ static def get_samples(params, defaults = [:], substitute = true, Closure prepro
         sample_sheet_path = Paths.get(params.data_dir, params.sample_sheet_name)
     }
     def sample_list = SampleSheetParser.load(sample_sheet_path as String, defaults, substitute, preprocess)
-    return Channel.fromList(sample_list)
+    return Channel.fromList(sample_list).map {
+        [*:it, output_run_dir: Paths.get(params.output_dir, it.run_path) as String]
+    }
 }
 
 // equivalent Groovy's GStringImpl and Java's String do not hash to the same value
