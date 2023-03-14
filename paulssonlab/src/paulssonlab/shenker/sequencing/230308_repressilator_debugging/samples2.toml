@@ -3,12 +3,10 @@ sample	references	min_read_size	max_read_size
 NAO691_01	/Users/jacob/Downloads/NAO684.gb	-	-
 NAO691_01	/Users/jacob/Downloads/NAO684.gb	9800	12000
 NAO692_02	/Users/jacob/Downloads/NAO686.gb	-	-
-NAO692_02	-	-	-
 NAO692_02	/Users/jacob/Downloads/NAO686.gb	2600	2800
 NAO692_02	/Users/jacob/Downloads/NAO686.gb	4800	5200
 NAO692_02	/Users/jacob/Downloads/NAO686.gb	9800	12000
 NAO693_03	/Users/jacob/Downloads/NAO689.gb	-	-
-NAO693_03	-	-	-
 NAO693_03	/Users/jacob/Downloads/NAO689.gb	2700	2900
 NAO693_03	/Users/jacob/Downloads/NAO689.gb	4800	5100
 NAO693_03	/Users/jacob/Downloads/NAO689.gb	9000	9200
@@ -18,6 +16,13 @@ NAO699b_05	-	-	-
 NAO699c_06	-	-	-
 """
 
-[[params]]
+[defaults]
 name = "${sample}${references ? '' : '_assembly'}_${min_read_size ?: 'na'}_to_${max_read_size ?: 'na'}"
 fastq = "${sample}.fastq.gz"
+
+[[params]]
+run_path = "ref"
+
+[[params]]
+ignore_references = true
+run_path = "assembly"

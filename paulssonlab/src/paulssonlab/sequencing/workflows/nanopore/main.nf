@@ -38,8 +38,14 @@ workflow NANOPORE {
 }
 
 workflow MAIN {
+    main:
     download_data(params)
-    glob_inputs(get_samples(params), params.data_dir, ["fastq", "fast5", "pod5"])
+    samples_preglob = get_samples(params, [:], true) {
+        if (it.get("ignore_references")) {
+            it.references = []
+        }
+    }
+    glob_inputs(samples_preglob, params.data_dir, ["fastq", "fast5", "pod5"])
         | PREPARE_REFERENCES
         | view
         // | NANOPORE

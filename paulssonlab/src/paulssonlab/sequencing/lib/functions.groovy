@@ -89,8 +89,7 @@ static def read_tsv(path) {
     return data
 }
 
-static def get_samples(params, defaults = [:], substitute = true) {
-// static def get_samples(params) {
+static def get_samples(params, defaults = [:], substitute = true, Closure preprocess = null) {
     def sample_sheet_path
     // not sure why we need to define this here, error otherwise:
     // cause: Variable `Paths` already defined in the process scope @ line 25, column 27.
@@ -100,7 +99,7 @@ static def get_samples(params, defaults = [:], substitute = true) {
     } else {
         sample_sheet_path = Paths.get(params.data_dir, params.sample_sheet_name)
     }
-    def sample_list = SampleSheetParser.load(sample_sheet_path as String, defaults, substitute)
+    def sample_list = SampleSheetParser.load(sample_sheet_path as String, defaults, substitute, preprocess)
     return Channel.fromList(sample_list)
 }
 
