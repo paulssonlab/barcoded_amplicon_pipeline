@@ -7,10 +7,14 @@ import static nextflow.Nextflow.groupKey
 import nextflow.Channel
 import groovy.transform.Field // SEE: https://stackoverflow.com/a/31301183
 
-
-
 @Field static final normal = "\033[0;0m"
 @Field static final bold = "\033[0;1m"
+
+static def renameKey(map, oldKey, newKey, defaultValue = null) {
+    map.put(newKey, map.remove(oldKey) ?: defaultValue)
+    return map
+}
+
 
 static def file_in_dir(dir, filename) {
     file(Paths.get(dir as String, filename as String))

@@ -4,14 +4,11 @@ import com.moandjiezana.toml.Toml
 import nextflow.util.CsvParser
 import java.nio.file.Paths
 import java.math.BigDecimal
+import functions.*
 
 class SampleSheetParser {
     private static Boolean anyDuplicates(x) {
         return x.toUnique().size() != x.size()
-    }
-
-    private static def renameKey(map, oldKey, newKey, defaultValue) {
-        return map.put(newKey, map.remove(oldKey) ?: defaultValue)
     }
 
     private static def splitString(str) {
