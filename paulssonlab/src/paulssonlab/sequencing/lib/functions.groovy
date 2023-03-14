@@ -27,35 +27,33 @@ static boolean is_dir_empty(dir) {
 
 static def download_data(params) {
     def remote_path = Paths.get(params.remote_path_base, params.remote_path)
-    println "${bold}Downloading data from${normal} ${remote_path}"
-    rsync(remote_path, params.data_dir)
-    println "${bold}Done.${normal}"
-}
-
-static def rsync(remote_path, dest_path) {
-    def dest = file(dest_path)
+    def dest = file(params.data_dir)
     if (is_dir_empty(dest)) {
         if (!dest.exists()) {
             dest.mkdirs()
         }
-        // SEE: https://stackoverflow.com/questions/25300550/difference-in-collecting-output-of-executing-external-command-in-groovy
-        // and https://stackoverflow.com/questions/159148/groovy-executing-shell-commands
-        // without escaping spaces, would need -T to deal with scp quoted source paths
-        // SEE: https://stackoverflow.com/questions/54598689/scp-fails-with-protocol-error-filename-does-not-match-request
-        // not sure why I need two backslashes to escape spaces
-        def command = ['rsync', '-az', (remote_path as String).replaceAll(' ', '\\\\ ') + "/", dest_path]
-        def proc = command.execute()
-        def outputStream = new StringBuffer()
-        proc.waitForProcessOutput(outputStream, outputStream)
-        //proc.waitForProcessOutput(System.out, System.err)
-        //return outputStream.toString()
-        if ((proc.exitValue() != 0) || (!dest.exists())) {
-            println "${bold}rsync failed with output:${normal}"
-            println outputStream.toString()
-            throw new Exception("rync of '${remote_path}' to '${dest_path}' failed")
-        }
+        println "${bold}Downloading data from${normal} ${remote_path}"
+        rsync(remote_path, dest)
+        println "${bold}Done.${normal}"
     }
     return dest
+}
+
+static def rsync(remote_path, dest_path) {
+    // SEE: https://stackoverflow.com/questions/25300550/difference-in-collecting-output-of-executing-external-command-in-groovy
+    // and https://stackoverflow.com/questions/159148/groovy-executing-shell-commands
+    // without escaping spaces, would need -T to deal with scp quoted source paths
+    // SEE: https://stackoverflow.com/questions/54598689/scp-fails-with-protocol-error-filename-does-not-match-request
+    // not sure why I need two backslashes to escape spaces
+    def command = ['rsync', '-az', (remote_path as String).replaceAll(' ', '\\\\ ') + "/", dest_path]
+    def proc = command.execute()
+    def outputStream = new StringBuffer()
+    proc.waitForProcessOutput(outputStream, outputStream)
+    if (proc.exitValue() != 0) {
+        println "${bold}rsync failed with output:${normal}"
+        println outputStream.toString()
+        throw new Exception("rync of '${remote_path}' to '${dest_path}' failed")
+    }
 }
 
 static def glob(pattern, base) {
