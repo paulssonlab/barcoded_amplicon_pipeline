@@ -1,2 +1,7 @@
+[tool.isort]
+profile = "black"
+line_length = 88
+skip_gitignore = true
 [tool.black]
-line-length = 88 # this is black's default
+line-length = 88
+target-version = ["py311"]
