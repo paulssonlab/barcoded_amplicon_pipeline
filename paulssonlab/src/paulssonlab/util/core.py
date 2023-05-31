@@ -1,7 +1,8 @@
+from collections.abc import Mapping, Sequence
 from itertools import zip_longest
-from collections.abc import Sequence, Mapping
 from numbers import Number
-from cytoolz import partial, compose
+
+from cytoolz import compose, partial
 
 
 def any_none(*args):
@@ -38,6 +39,7 @@ def format_number(fmt, x):
 
 
 UNEVEN_GROUPS = object()
+
 
 # TODO: what does this fancy version even do?? document!!!
 # TODO: steal better version from recipes, or find in a library

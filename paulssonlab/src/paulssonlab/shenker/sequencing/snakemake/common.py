@@ -1,6 +1,6 @@
 import os
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
 
 DIRS_TO_LINK = ["data", "references", "output", "logs"]
 REMOTE_HOST = "transfer.rc.hms.harvard.edu"
@@ -35,8 +35,9 @@ def _get_workdir():
 # TODO: this caching doesn't work because snakemake forks for each job
 @lru_cache
 def get_registry(config_dir=CLONING_CONFIG_DIR):
-    import toml
     import pygsheets
+    import toml
+
     import paulssonlab.cloning.registry as registry
 
     config_dir = Path(config_dir)

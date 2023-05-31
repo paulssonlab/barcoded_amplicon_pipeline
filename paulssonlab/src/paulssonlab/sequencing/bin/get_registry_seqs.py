@@ -1,21 +1,22 @@
 #!/usr/bin/env python
-import time
-import sys
-import os
-import shutil
-import re
-import json
 import hashlib
-from frozendict import frozendict
-import toml
+import json
+import os
+import re
+import shutil
+import sys
+import time
 from pathlib import Path
+
 import pygsheets
+import toml
+from frozendict import frozendict
 
 sys.path.append(str(Path(os.environ["src"]).parent))
 import paulssonlab.cloning.registry as registry
 from paulssonlab.cloning.commands.parser import expr_list_parser, unparse_expr
 from paulssonlab.cloning.commands.semantics import eval_expr
-from paulssonlab.util.hashing import hash_json, hash_str, freeze
+from paulssonlab.util.hashing import freeze, hash_json, hash_str
 
 RETRIES = 3
 RETRY_DELAY = 0.3

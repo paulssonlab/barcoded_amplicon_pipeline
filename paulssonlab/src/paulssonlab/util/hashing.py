@@ -1,8 +1,10 @@
 import collections.abc
-from frozendict import frozendict
 import functools
-import json
 import hashlib
+import json
+
+from frozendict import frozendict
+
 
 # FROM: https://stackoverflow.com/a/53035002
 @functools.singledispatch
