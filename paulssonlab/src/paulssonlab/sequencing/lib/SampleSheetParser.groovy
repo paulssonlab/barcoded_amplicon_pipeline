@@ -4,7 +4,6 @@ import com.moandjiezana.toml.Toml
 import nextflow.util.CsvParser
 import java.nio.file.Paths
 import java.math.BigDecimal
-import functions.*
 
 class SampleSheetParser {
     private static Boolean anyDuplicates(x) {

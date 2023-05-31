@@ -10,12 +10,6 @@ import groovy.transform.Field // SEE: https://stackoverflow.com/a/31301183
 @Field static final normal = "\033[0;0m"
 @Field static final bold = "\033[0;1m"
 
-static def renameKey(map, oldKey, newKey, defaultValue = null) {
-    map.put(newKey, map.remove(oldKey) ?: defaultValue)
-    return map
-}
-
-
 static def file_in_dir(dir, filename) {
     file(Paths.get(dir as String, filename as String))
 }
@@ -64,10 +58,10 @@ static def glob(pattern, base) {
     def paths = []
     def path_matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern)
     base = file(base).toAbsolutePath()
-    Files.walk(base).forEach { path ->
-        path = base.relativize(path)
-        if (path_matcher.matches(path)) {
-            paths << path
+    Files.walk(base).forEach { abs_path ->
+        def rel_path = base.relativize(abs_path)
+        if (path_matcher.matches(rel_path)) {
+            paths << abs_path
         }
     }
     return paths
@@ -105,7 +99,7 @@ static def get_samples(params, defaults = [:], substitute = true, Closure prepro
     }
     def sample_list = SampleSheetParser.load(sample_sheet_path as String, defaults, substitute, preprocess)
     return Channel.fromList(sample_list).map {
-        [*:it, output_run_dir: Paths.get(params.output_dir, it.run_path) as String]
+        [*:it, output_run_dir: file_in_dir(params.output_dir, it.run_path)]
     }
 }
 
@@ -164,6 +158,15 @@ static def join_map(ch_entries, ch_map, key, stringify_keys = true) {
     }
 }
 
+// returns a map with old_key removed and replaced by new_key, optionally
+// modifying the value with a closure
+static def rename_key(map, old_key, new_key, Closure closure = Closure.IDENTITY) {
+    def new_map = map.clone()
+    new_map.keySet().removeAll([old_key])
+    new_map[new_key] = closure(map[old_key])
+    new_map
+}
+
 // edit_map_key renames a map's key (if closure is Closure.IDENTITY)
 // or runs a closure on a map's key (if old_key == new_key)
 // or does both at the same time
@@ -195,8 +198,18 @@ static def collect_closures(map, Object... args) {
 
 // see below. call_closure is the same as call_process except it does not uniquify the channel
 // sent to the process.
-static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, stringify_keys = true, Closure preprocess) {
-    def ch_input = ch.map { it ->
+static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, when = null, passthrough = true, stringify_keys = true, Closure preprocess) {
+// static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, Closure when, passthrough = true, stringify_keys = true, Closure preprocess) {
+    def ch_filtered
+    def ch_passthrough
+    if (when) {
+        ch_filtered = ch.filter { when(it) }
+        ch_passthrough = ch.filter { !when(it) }
+    } else {
+        ch_filtered = ch
+        ch_passthrough = Channel.empty()
+    }
+    def ch_input = ch_filtered.map { it ->
             def join_map_ = it.subMap(join_keys)
             // we could use preprocess(it) and collect_closures(..., it) here,
             // but that would allow the process to depend on information
@@ -204,12 +217,13 @@ static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys
             [[*:join_map_,
               *:collect_closures(closure_map, join_map_)], *preprocess(join_map_)]
         }
-    def ch_output = closure(ch_input).map { [remove_keys(it[0], closure_map.keySet()), *it[1..-1]] }
+    def ch_processed = closure(ch_input).map { [remove_keys(it[0], closure_map.keySet()), *it[1..-1]] }
     def ch_orig = ch.map { [it.subMap(join_keys), it] }
-    cross(ch_output, ch_orig, stringify_keys)
+    return cross(ch_processed, ch_orig, stringify_keys)
         .map {
             [*:it[1][1], *:[output_keys, it[0][1..-1]].transpose().collectEntries()]
         }
+        .mix(ch_passthrough)
 }
 
 // preprocess takes each map from ch (with all keys removed except for join_keys) and outputs a list
@@ -221,9 +235,11 @@ static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys
 // closure_map is a way of adding additional keys to meta derived from only the information
 // in join_keys. the purpose is to allow using processes that expect extra keys in meta
 // without having to modify the process itself.
-static def call_process(process, ch, join_keys, closure_map, output_keys, stringify_keys = true, Closure preprocess) {
+static def call_process(process, ch, join_keys, closure_map, output_keys, when = null, passthrough = true, stringify_keys = true, Closure preprocess) {
+// static def call_process(process, ch, join_keys, closure_map, output_keys, Closure when, passthrough = true, stringify_keys = true, Closure preprocess) {
     // TODO: not sure why { process(it.unique()) } doesn't work
-    call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, stringify_keys, preprocess)
+    // call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, when, passthrough, stringify_keys, preprocess)
+    call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, when, passthrough, stringify_keys, preprocess)
 }
 
 static def uuid() {
@@ -237,7 +253,7 @@ static def uuid() {
 // and not just the mapped value itself, although this may prevent deduplicating process calls
 // temp_key is an arbitrary unique string and is used as a prefix for keys that are
 // temporarily added to the map that is passed through process
-static def map_call_process(process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, pass_empty = true, Closure preprocess) {
+static def map_call_process(process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, passthrough = true, Closure preprocess) {
     // the key we use to store the list of UUIDs we use when joining input channel and process output channel
     def temp_uuids_key = "${temp_key}_uuids"
     // the key we use to store mapped value for each process input. this is used to ensure
@@ -246,7 +262,7 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
     def temp_mapped_value_key = "${temp_key}_mapped_value"
     // ch is a channel emitting maps. some of these items may contains empty collections.
     // these items disappear when we transpose, below. as such, we filter them out.
-    // if pass_empty is true, we mixthem to ch_output before returning
+    // if passthrough is true, we mix them to ch_output before returning
     def ch_input_nonempty = ch.filter { it.getOrDefault(map_input_key, []).size() != 0 }
     def ch_input_untransposed = ch_input_nonempty.map {
             def collection_to_map = it.getOrDefault(map_input_key, [])
@@ -310,7 +326,7 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
         // merge new output keys into map
         [*:input, *:new_output]
     }
-    if (pass_empty) {
+    if (passthrough) {
         // add items with empty collections to output channel
         // we could add an empty list to each item keyed under output_key,
         // but this probably is not helpful

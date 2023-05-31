@@ -59,7 +59,7 @@ process BOWTIE2_ALIGN {
 def call_BOWTIE2_ALIGN(ch) {
     call_process(BOWTIE2_ALIGN,
                  ch,
-                 ["reads", "index", "bowtie2_align_args", "sort_bam"],
+                 ["fastq", "index", "bowtie2_align_args", "sort_bam"],
                  [id: { it.reads.baseName }],
                  ["bam", "bowtie2_log"]) { [it.reads, it.index] }
 }

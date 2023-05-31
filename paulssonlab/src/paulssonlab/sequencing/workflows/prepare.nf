@@ -29,7 +29,7 @@ def json_command(command, input) {
 def get_registry_seqs(references_dir, sample_references) {
     def output = json_command(["${src}/sequencing/bin/get_registry_seqs.py", "${src}/shenker/cloning", references_dir], sample_references)
     edit_map_key(output, "references", "references") { refs ->
-        refs.collect { ref -> file_in_dir(references_dir, ref) } as Set
+        refs.collect { file(it) } as Set
     }
 }
 

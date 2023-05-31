@@ -13,10 +13,15 @@ process ANY2FASTA {
 
     conda "${params.conda_env_dir}/any2fasta.yml"
 
+    // script:
+    // """
+    // any2fasta -q ${input} | seqkit replace -p '(.*)' -r '${meta.id}' > ${input.baseName}.fasta
+    // """
     script:
     """
-    any2fasta -q ${input} | seqkit replace -p '(.*)' -r '${meta.id}' > ${input.baseName}.fasta
+    any2fasta -q ${input} > ${input.baseName}.fasta
     """
+    // any2fasta -q !{input} | seqkit replace -p '(.*)' -r '!{meta.id}' > !{input.baseName}.fasta
 }
 
 process MERGE_FILES {
