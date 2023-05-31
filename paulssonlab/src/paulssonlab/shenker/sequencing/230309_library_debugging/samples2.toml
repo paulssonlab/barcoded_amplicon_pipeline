@@ -1,0 +1,15 @@
+tsv = """\
+sample	references	min_read_length	max_read_length
+NAO700_01	/Users/jacob/Downloads/NAO694.gb	-	-
+NAO701_02	/Users/jacob/Downloads/NAO695.gb	-	-
+NAO702_03	/Users/jacob/Downloads/NAO696.gb	-	-
+"""
+#NAO703_04	/Users/jacob/Downloads/NAO.gb	-	-
+#NAO704_05	/Users/jacob/Downloads/NAO.gb	-	-
+
+[defaults]
+name = "${sample}${references ? '' : '_assembly'}_${min_read_length ?: 'na'}_to_${max_read_length ?: 'na'}"
+fastq = "${sample}.fastq.gz"
+
+[[params]]
+run_path = "ref"

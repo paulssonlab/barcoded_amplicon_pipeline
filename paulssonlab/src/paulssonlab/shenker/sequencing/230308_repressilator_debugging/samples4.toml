@@ -13,13 +13,6 @@ NAO693_03	/Users/jacob/Downloads/NAO689.gb	9000	9200
 NAO693_03	/Users/jacob/Downloads/NAO689.gb	9800	12000
 """
 
-[defaults]
+[[params]]
 name = "${sample}${references ? '' : '_assembly'}_${min_read_length ?: 'na'}_to_${max_read_length ?: 'na'}"
 fastq = "${sample}.fastq.gz"
-
-[[params]]
-run_path = "ref"
-
-[[params]]
-ignore_references = true
-run_path = "assembly"
