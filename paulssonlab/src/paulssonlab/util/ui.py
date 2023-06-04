@@ -3,7 +3,9 @@ import numpy as np
 from IPython.display import Image
 
 
-def display_image(img, scale=False, format="jpg"):
+def display_image(img, scale=False, downsample=1, format="jpg"):
+    if downsample != 1:
+        img = img[::downsample, ::downsample, ...]
     if scale:
         img_min = img.min()
         img = (img - img_min) / (img.max() - img_min)
