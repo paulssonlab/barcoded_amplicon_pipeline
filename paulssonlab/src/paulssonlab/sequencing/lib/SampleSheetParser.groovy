@@ -48,6 +48,9 @@ class SampleSheetParser {
         samplesTable?.each {
             samples << it
         }
+        if (!samples) {
+            samples << [:] // add empty sample if sampleTable is empty
+        }
         def paramSets = sampleSheet.getOrDefault("params", [[run_path: "default"]])
         def tomlDefaults = sampleSheet.getOrDefault("defaults", [:])
         paramSets = paramSets.collect {
@@ -70,7 +73,10 @@ class SampleSheetParser {
                 v
             }
             if (preprocess != null) {
-                preprocess(it)
+                def new_run = preprocess(it)
+                if (new_run) {
+                    it = new_run
+                }
             }
             def meta = it.clone() // so substitutions can't depend on each other
             it.replaceAll { k, v ->
@@ -80,7 +86,10 @@ class SampleSheetParser {
                     v
                 }
             }
-            it.run_path = Paths.get(it.run_path, it.name) as String
+            // if we have a single sample, it may not have a name, so this would be unnecessary
+            if (it.get("name")) {
+                it.run_path = Paths.get(it.run_path, it.name) as String
+            }
         }
         runs = runs.unique()
         runs.eachWithIndex { it, index ->
