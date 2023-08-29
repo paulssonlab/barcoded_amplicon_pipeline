@@ -1,0 +1,9 @@
+[[params]]
+fastq_input = "fastq2_{pass,fail}/*.fastq.gz"
+pod5_input = "pod52_{pass,fail}/*.pod5"
+fastq_input2 = "fastq_pass"
+fast5_input2 = "fast5_pass"
+basecall = true
+duplex = true
+dorado_model = "dna_r10.4.1_e8.2_400bps_sup@v4.2.0"
+dorado_duplex_model = "dna_r10.4.1_e8.2_5khz_stereo@v1.1"

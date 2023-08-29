@@ -76,6 +76,19 @@ static def glob_inputs(ch, base, input_names) {
     }
 }
 
+static def find_inputs(ch, base, input_names) {
+    ch.map { it ->
+        input_names.each { k ->
+            if (it.get(k) && file_in_dir(base, it[k]).exists()) {
+                it[k] = file_in_dir(base, k)
+            } else {
+                it.remove(k)
+            }
+        }
+        it
+    }
+}
+
 static def read_tsv(path) {
     def parser = new CsvParser()
         .setSeparator('\t')
@@ -88,18 +101,9 @@ static def read_tsv(path) {
 }
 
 static def get_samples(params, defaults = [:], substitute = true, Closure preprocess = null) {
-    def sample_sheet_path
-    // not sure why we need to define this here, error otherwise:
-    // cause: Variable `Paths` already defined in the process scope @ line 25, column 27.
-    def remote_path
-    if (params?.samples) {
-        sample_sheet_path = params.samples
-    } else {
-        sample_sheet_path = Paths.get(params.data_dir, params.sample_sheet_name)
-    }
-    def sample_list = SampleSheetParser.load(sample_sheet_path as String, defaults, substitute, preprocess)
+    def sample_list = SampleSheetParser.load(params.samples, defaults, substitute, preprocess)
     return Channel.fromList(sample_list).map {
-        [*:it, output_run_dir: file_in_dir(params.output_dir, it.run_path)]
+        [*:it, output_run_dir: file_in_dir(params.output, it.run_path)]
     }
 }
 
