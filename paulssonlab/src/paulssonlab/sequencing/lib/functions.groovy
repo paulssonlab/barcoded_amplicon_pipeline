@@ -89,6 +89,27 @@ static def find_inputs(ch, base, input_names) {
     }
 }
 
+static def chunk_files(files, chunk_bytes = 0, chunk_files = 0) {
+    if (chunk_bytes && !chunk_files) {
+        def chunks = [[]]
+        def bytes = 0
+        files.each {
+            def file_bytes = it.size()
+            if (bytes + file_bytes >= chunk_bytes) {
+                chunks << []
+                bytes = 0
+            }
+            bytes += file_bytes
+            chunks[-1] << it
+        }
+        chunks
+    } else if (chunk_files && !chunk_bytes) {
+        files.collate(chunk_files as int)
+    } else {
+        throw new Exception("exactly one of chunk_bytes, chunk_files must be specified")
+    }
+}
+
 static def read_tsv(path) {
     def parser = new CsvParser()
         .setSeparator('\t')
