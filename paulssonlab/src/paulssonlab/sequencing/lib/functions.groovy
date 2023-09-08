@@ -10,6 +10,11 @@ import groovy.transform.Field // SEE: https://stackoverflow.com/a/31301183
 @Field static final normal = "\033[0;0m"
 @Field static final bold = "\033[0;1m"
 
+static def exemplar(obj) {
+    (obj instanceof List) ? obj[0] : obj
+
+}
+
 static def file_in_dir(dir, filename) {
     file(Paths.get(dir as String, filename as String))
 }

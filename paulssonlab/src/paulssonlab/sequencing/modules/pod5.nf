@@ -39,13 +39,13 @@ process POD5_FILTER {
     tuple val(meta), path(pod5, stageAs: "?.pod5"), path(read_ids)
 
     output:
-    tuple val(meta), path("output.pod5")
+    tuple val(meta), path("${meta.id}.pod5")
 
     conda "${params.conda_env_dir}/pod5.yml"
 
     script:
     """
-    pod5 filter -t ${task.cpus} ${meta.pod5_filter_args ?: ""} -i ${read_ids} -o output.pod5 ${pod5}
+    pod5 filter -t ${task.cpus} ${meta.pod5_filter_args ?: ""} -i ${read_ids} -o ${meta.id}.pod5 ${pod5}
     """
 }
 

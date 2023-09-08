@@ -3,7 +3,10 @@ import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import static functions.*
 
-include { POD5_MERGE; POD5_MERGE as POD5_MERGE2; POD5_VIEW; POD5_FILTER; SPLIT_READ_IDS } from '../../modules/pod5.nf'
+include { POD5_MERGE; POD5_VIEW; POD5_FILTER; SPLIT_READ_IDS } from '../../modules/pod5.nf'
+include { DORADO_DOWNLOAD;
+          DORADO_DOWNLOAD as DORADO_DOWNLOAD2;
+          DORADO_DUPLEX; DORADO_BASECALLER } from '../../modules/dorado.nf'
 
 workflow NANOPORE_FISH {
     take:
@@ -11,11 +14,19 @@ workflow NANOPORE_FISH {
 
     main:
     samples_in
+        .map {
+            edit_key(it, "pod5_input") { l -> l[0..1] }
+        }
         .branch {
+            yes: !(it.containsKey("basecall") && !it["basecall"])
+            no: true
+        }
+        .set { ch_do_basecall }
+    ch_do_basecall.yes.branch {
             // chunk pod5 files UNLESS:
             // map contains the key pod5_chunk and it is false
             // OR both pod5_chunk_bytes and pod5_chunk_files are falsy
-            yes: ! ((it.containsKey("pod5_chunk") && !it["pod5_chunk"])
+            yes: !((it.containsKey("pod5_chunk") && !it["pod5_chunk"])
                                         || (!it.get("pod5_chunk_bytes")
                                             && !it.get("pod5_chunk_files")))
             no: true
@@ -28,7 +39,6 @@ workflow NANOPORE_FISH {
             it
         }
         . set { ch_pod5_chunked }
-    ch_pod5_chunked.set { samples }
     map_call_process(POD5_MERGE,
                      ch_pod5_chunked,
                      ["pod5_input_chunked", "pod5_merge_args"],
@@ -66,6 +76,7 @@ workflow NANOPORE_FISH {
         ["pod5_split_read_lists"]) { meta -> [meta.pod5_read_list] }
         .set { ch_pod5_split_read_lists }
     map_call_process(POD5_FILTER,
+        // TODO
         ch_pod5_split_read_lists.map { edit_key(it, "pod5_split_read_lists") { l -> l[0..10] } },
         // ch_pod5_split_read_lists,
         ["pod5_to_split", "pod5_filter_args"],
@@ -78,10 +89,45 @@ workflow NANOPORE_FISH {
         [*:it, pod5: it.get("pod5_split")]
     }
         .mix(ch_do_pod5_split.no.map { [*:it, pod5: it.get("pod5_to_split")] })
+        .set { ch_pod5 }
+    call_process(DORADO_DOWNLOAD,
+        ch_pod5,
+        ["dorado_model", "dorado_download_args"],
+        [id: { it.dorado_model }],
+        ["dorado_model_dir"]) { meta -> [meta.dorado_model] }
+        .set { ch_dorado_model }
+    ch_dorado_model.branch {
+            yes: !(it.containsKey("duplex") && !it["duplex"])
+            no: true
+        }
+        .set { ch_do_duplex }
+    call_process(DORADO_DOWNLOAD2,
+        ch_do_duplex.yes,
+        ["dorado_duplex_model", "dorado_download_args"],
+        [id: { it.dorado_duplex_model }],
+        ["dorado_duplex_model_dir"]) { meta -> [meta.dorado_duplex_model] }
+        .set { ch_dorado_duplex_model }
+    map_call_process(DORADO_DUPLEX,
+        //TODO
+        ch_dorado_duplex_model.map { edit_key(it, "pod5") { l -> l[0..1] } },
+        //ch_dorado_duplex_model
+        ["pod5", "dorado_model_dir", "dorado_duplex_model_dir", "dorado_duplex_args"],
+        [id: { pod5, meta -> exemplar(pod5).baseName }],
+        "pod5",
+        ["bam"],
+        "_DORADO_DUPLEX") { pod5, meta -> [pod5, meta.dorado_model_dir, meta.dorado_duplex_model_dir] }
+        .set { ch_dorado_duplex }
+    map_call_process(DORADO_BASECALLER,
+        ch_do_duplex.no,
+        ["pod5", "dorado_model_dir", "dorado_basecaller_args"],
+        [id: { pod5, meta -> exemplar(pod5).baseName }],
+        "pod5",
+        ["bam"],
+        "_DORADO_BASECALLER") { pod5, meta -> [pod5, meta.dorado_model_dir] }
+        .set { ch_dorado_basecaller }
+    ch_dorado_basecaller.mix(ch_dorado_duplex)
         .set { samples }
 
-    // dorado simplex+duplex model download
-    // dorado duplex basecalling
     // publish bams
     // filter dx:0/1 from bam -> fastq.gz
     // porechop_abi
