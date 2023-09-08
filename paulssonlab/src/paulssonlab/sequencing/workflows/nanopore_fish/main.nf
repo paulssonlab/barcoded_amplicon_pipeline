@@ -73,6 +73,11 @@ workflow NANOPORE_FISH {
         "pod5_split_read_lists",
         ["pod5_split"],
         "_POD5_FILTER") { read_list, meta -> [meta.pod5_to_split, read_list] }
+        .set { ch_pod5_split }
+    ch_pod5_split.map {
+        [*:it, pod5: it.get("pod5_split")]
+    }
+        .mix(ch_do_pod5_split.no.map { [*:it, pod5: it.get("pod5_to_split")] })
         .set { samples }
 
     // dorado simplex+duplex model download
