@@ -1,0 +1,8 @@
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - click=8.1.7
+  - python=3.11.5
+  - pyarrow=13.0.0

@@ -64,13 +64,13 @@ static def glob(pattern, base) {
             paths << abs_path
         }
     }
-    return paths
+    return paths.sort() // useful for making nextflow hashes insensitive to input order
 }
 
 static def glob_inputs(ch, base, input_names) {
     ch.map { it ->
         input_names.each { k ->
-            it[k] = it.get(k) ? glob(it[k], base) : []
+            it[k] = (it.get(k) ? glob(it[k], base) : [])
         }
         it
     }
@@ -192,19 +192,17 @@ static def rename_key(map, old_key, new_key, Closure closure = Closure.IDENTITY)
     new_map
 }
 
-// edit_map_key renames a map's key (if closure is Closure.IDENTITY)
-// or runs a closure on a map's key (if old_key == new_key)
-// or does both at the same time
-// TODO: if I define a default argument Closure closure = Closure.IDENTITY,
-// I get a wrong number of arguments error
-// this may be a limitation of nextflow functions (is there a difference?),
-// and real Groovy functions (defined in a .groovy file)
-// and/or typed functions may work
-static def edit_map_key(map, old_key, new_key, Closure closure) {
-    map.collectEntries { k, v ->
-        def value = [*:v, (new_key): closure(v.get(old_key))]
-        [(k): value]
-    }
+static def swap_key(map, key1, key2, key3 = null) {
+    key3 = key3 ?: key1
+    def temp = map[key1]
+    def new_map = map.close()
+    new_map.put(key1, new_map[key2]);
+    new_map.put(key2, temp);
+    new_map
+}
+
+static def edit_key(map, key, Closure closure = Closure.IDENTITY) {
+    [*:map, (key): closure(map.get(key))]
 }
 
 // removes keys from map
@@ -225,6 +223,9 @@ static def collect_closures(map, Object... args) {
 // sent to the process.
 static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, when = null, passthrough = true, stringify_keys = true, Closure preprocess) {
 // static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, Closure when, passthrough = true, stringify_keys = true, Closure preprocess) {
+    if (!(output_keys instanceof List)) {
+        throw new Exception("output_keys must be a List")
+    }
     def ch_filtered
     def ch_passthrough
     if (when) {
@@ -267,10 +268,6 @@ static def call_process(process, ch, join_keys, closure_map, output_keys, when =
     call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, when, passthrough, stringify_keys, preprocess)
 }
 
-static def uuid() {
-    UUID.randomUUID().toString()
-}
-
 // this works like call_process but for each input map emitted by ch, it will call process
 // for each value in a collection (i.e., list) in the input map under map_input_key
 // all arguments work similarly to those for call_process, the only difference is that
@@ -279,8 +276,11 @@ static def uuid() {
 // temp_key is an arbitrary unique string and is used as a prefix for keys that are
 // temporarily added to the map that is passed through process
 static def map_call_process(process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, passthrough = true, Closure preprocess) {
-    // the key we use to store the list of UUIDs we use when joining input channel and process output channel
-    def temp_uuids_key = "${temp_key}_uuids"
+    if (!(output_keys instanceof List)) {
+        throw new Exception("output_keys must be a List")
+    }
+    // the key we use to store the list of hashes we use when joining input channel and process output channel
+    def temp_hashes_key = "${temp_key}_hashes"
     // the key we use to store mapped value for each process input. this is used to ensure
     // that the order of values in output collections corresponds to the order of values
     // in the input collection
@@ -291,12 +291,12 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
     def ch_input_nonempty = ch.filter { it.getOrDefault(map_input_key, []).size() != 0 }
     def ch_input_untransposed = ch_input_nonempty.map {
             def collection_to_map = it.getOrDefault(map_input_key, [])
-            // we need to use groupKey to wrap the UUID so that the second groupTuple invokation
-            // (ch_output_transposed.groupTuple) knows how many elements to expect for each UUID
+            // we need to use groupKey to wrap the hash so that the second groupTuple invokation
+            // (ch_output_transposed.groupTuple) knows how many elements to expect for each hash
             // note that Nextflow's transpose operator requires that the collection be a List
-            [groupKey(uuid(), collection_to_map.size()), it, collection_to_map as List]
+            [groupKey(it.hashCode(), collection_to_map.size()), it, collection_to_map as List]
         }
-    // transpose over collection (all tuples for a given collection get the same UUID)
+    // transpose over collection (all tuples for a given collection get the same hash)
     def ch_input_transposed = ch_input_untransposed.transpose(by: 2)
     def ch_input_transposed_with_key = ch_input_transposed.map { key, map, mapped_value ->
         // this is the map that is passed as the first argument to the process
@@ -317,26 +317,26 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
         def process_input = [process_map, *preprocess(mapped_value, closure_input_map)]
         [process_input, key]
     }
-    // we want to get a list of UUIDs for each unique process_input
+    // we want to get a list of hashes for each unique process_input
     // (so that we can reuse output for identical computations)
     def ch_process_groups = ch_input_transposed_with_key.groupTuple(by: 0)
     def ch_process_input = ch_process_groups.map { process_input, keys ->
-        // we have to store the list of UUIDs in the map so that we have it in the process output
-        [[*:process_input[0], (temp_uuids_key):keys], *process_input[1..-1]]
+        // we have to store the list of hashes in the map so that we have it in the process output
+        [[*:process_input[0], (temp_hashes_key):keys], *process_input[1..-1]]
     }
     def ch_process_output = ch_process_input | process
-    // we need to pull out the list of UUIDs and put it in a tuple so we can transpose
+    // we need to pull out the list of hashes and put it in a tuple so we can transpose
     def ch_output_untransposed = ch_process_output.map {
-        [it[0].get(temp_uuids_key), it]
+        [it[0].get(temp_hashes_key), it]
     }
     def ch_output_transposed = ch_output_untransposed.transpose(by: 0)
     // groupTuple will emit each output collection
     // because we are using groupTuple with groupKeys that have their sizes specified, this channel
     // will emit as soon as all output elements for an input collection are ready
     def ch_output_grouped = ch_output_transposed.groupTuple(by: 0)
-    // join the inputs (with UUIDs) and the outputs
+    // join the inputs (with hashes) and the outputs
     def ch_output_joined = ch_input_untransposed.cross(ch_output_grouped).map { input, output ->
-        // remove UUIDs from input/output tuples
+        // remove hashes from input/output tuples
         [input[1], output[1]]
     }
     def ch_output = ch_output_joined.map { input, output ->
