@@ -1,11 +1,16 @@
 import java.nio.file.Paths
 import java.nio.file.Files
 import java.nio.file.FileSystems
-import nextflow.util.CsvParser
+import groovy.transform.Field // SEE: https://stackoverflow.com/a/31301183
+import org.codehaus.groovy.runtime.InvokerHelper
+import com.google.common.hash.Hasher
 import static nextflow.Nextflow.file
 import static nextflow.Nextflow.groupKey
 import nextflow.Channel
-import groovy.transform.Field // SEE: https://stackoverflow.com/a/31301183
+import nextflow.util.CacheFunnel
+import nextflow.util.KryoHelper
+import nextflow.util.CacheHelper.HashMode
+import nextflow.util.CsvParser
 
 @Field static final normal = "\033[0;0m"
 @Field static final bold = "\033[0;1m"
@@ -273,6 +278,58 @@ static def call_process(process, ch, join_keys, closure_map, output_keys, when =
     call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, when, passthrough, stringify_keys, preprocess)
 }
 
+// based on nextflow.extension.GroupKey
+class HashlessObject implements CacheFunnel, Cloneable {
+    static {
+        // SEE: https://github.com/nextflow-io/nextflow/issues/1934#issuecomment-1028240481
+        KryoHelper.register(HashlessObject)
+    }
+
+    def target
+
+    // needed by kryo
+    HashlessObject() { }
+
+    HashlessObject(target) {
+        this.target = target
+    }
+
+    // delegate any method invocation to the target key object
+    def methodMissing(String name, def args) {
+        InvokerHelper.invokeMethod(target, name, args)
+    }
+
+    // delegate any property invocation to the target object
+    def propertyMissing(String name) {
+        InvokerHelper.getProperty(target, name)
+    }
+
+    @Override
+    boolean equals(obj) {
+        obj instanceof HashlessObject ? target.equals(obj.target) : target.equals(obj)
+    }
+
+    @Override
+    int hashCode() {
+        target.hashCode()
+    }
+
+    @Override
+    String toString() {
+        target.toString()
+    }
+
+    @Override
+    Hasher funnel(Hasher hasher, HashMode mode) {
+        // don't hash anything
+        return hasher
+    }
+}
+
+static def hashless_uuid() {
+    new HashlessObject(UUID.randomUUID().toString())
+}
+
 // this works like call_process but for each input map emitted by ch, it will call process
 // for each value in a collection (i.e., list) in the input map under map_input_key
 // all arguments work similarly to those for call_process, the only difference is that
@@ -284,8 +341,8 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
     if (!(output_keys instanceof List)) {
         throw new Exception("output_keys must be a List")
     }
-    // the key we use to store the list of hashes we use when joining input channel and process output channel
-    def temp_hashes_key = "${temp_key}_hashes"
+    // the key we use to store the list of UUIDs we use when joining input channel and process output channel
+    def temp_uuids_key = "${temp_key}_uuids"
     // the key we use to store mapped value for each process input. this is used to ensure
     // that the order of values in output collections corresponds to the order of values
     // in the input collection
@@ -296,12 +353,12 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
     def ch_input_nonempty = ch.filter { it.getOrDefault(map_input_key, []).size() != 0 }
     def ch_input_untransposed = ch_input_nonempty.map {
             def collection_to_map = it.getOrDefault(map_input_key, [])
-            // we need to use groupKey to wrap the hash so that the second groupTuple invokation
-            // (ch_output_transposed.groupTuple) knows how many elements to expect for each hash
+            // we need to use groupKey to wrap the UUID so that the second groupTuple invokation
+            // (ch_output_transposed.groupTuple) knows how many elements to expect for each UUID
             // note that Nextflow's transpose operator requires that the collection be a List
-            [groupKey(it.hashCode(), collection_to_map.size()), it, collection_to_map as List]
+            [groupKey(hashless_uuid(), collection_to_map.size()), it, collection_to_map as List]
         }
-    // transpose over collection (all tuples for a given collection get the same hash)
+    // transpose over collection (all tuples for a given collection get the same UUID)
     def ch_input_transposed = ch_input_untransposed.transpose(by: 2)
     def ch_input_transposed_with_key = ch_input_transposed.map { key, map, mapped_value ->
         // this is the map that is passed as the first argument to the process
@@ -322,26 +379,26 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
         def process_input = [process_map, *preprocess(mapped_value, closure_input_map)]
         [process_input, key]
     }
-    // we want to get a list of hashes for each unique process_input
+    // we want to get a list of UUIDs for each unique process_input
     // (so that we can reuse output for identical computations)
     def ch_process_groups = ch_input_transposed_with_key.groupTuple(by: 0)
     def ch_process_input = ch_process_groups.map { process_input, keys ->
-        // we have to store the list of hashes in the map so that we have it in the process output
-        [[*:process_input[0], (temp_hashes_key):keys], *process_input[1..-1]]
+        // we have to store the list of UUIDs in the map so that we have it in the process output
+        [[*:process_input[0], (temp_uuids_key):keys], *process_input[1..-1]]
     }
     def ch_process_output = ch_process_input | process
-    // we need to pull out the list of hashes and put it in a tuple so we can transpose
+    // we need to pull out the list of UUIDs and put it in a tuple so we can transpose
     def ch_output_untransposed = ch_process_output.map {
-        [it[0].get(temp_hashes_key), it]
+        [it[0].get(temp_uuids_key), it]
     }
     def ch_output_transposed = ch_output_untransposed.transpose(by: 0)
     // groupTuple will emit each output collection
     // because we are using groupTuple with groupKeys that have their sizes specified, this channel
     // will emit as soon as all output elements for an input collection are ready
     def ch_output_grouped = ch_output_transposed.groupTuple(by: 0)
-    // join the inputs (with hashes) and the outputs
+    // join the inputs (with UUIDs) and the outputs
     def ch_output_joined = ch_input_untransposed.cross(ch_output_grouped).map { input, output ->
-        // remove hashes from input/output tuples
+        // remove UUIDs from input/output tuples
         [input[1], output[1]]
     }
     def ch_output = ch_output_joined.map { input, output ->

@@ -98,16 +98,16 @@ process DUMMY_PROCESS_INDEX {
 
     script:
     """
-    sleep \$[ ( \$RANDOM % ${meta.max_sleep} )  + 1 ]s
-    echo x input1:${input1} + input2:${input2} + max_sleep:${meta.max_sleep} + id:${meta.id} > x
-    echo y input1:${input1} + input2:${input2} + max_sleep:${meta.max_sleep} + id:${meta.id} > y
+    #sleep \$[ ( \$RANDOM % ${meta.max_sleep} )  + 1 ]s
+    echo __ \$RANDOM __ x input1:${input1} + input2:${input2} + max_sleep:${meta.max_sleep} + id:${meta.id} > x
+    echo __ \$RANDOM __ y input1:${input1} + input2:${input2} + max_sleep:${meta.max_sleep} + id:${meta.id} > y
     """
 }
 
 workflow MAP_CALL_PROCESS {
     ch = Channel.fromList([[val: 1, max_sleep: 3, input2: "hhh", refs: ["k", "kk"]],
-                           [val: 2, max_sleep: 3, input2: "hhh", refs: ["k", "l"]],
-                           [val: 3, max_sleep: 20, input2: "hhh", refs: ["k", "kk", "l"]],
+                           [val: 2, max_sleep: 3, input2: "hhh", refs: ["k", "l", "k", "k", "k", "e"]],
+                           [val: 3, max_sleep: 20, input2: "hhh", refs: ["k", "kk", "l", "l"]],
                            [val: 4, max_sleep: 20, input2: "hhh", refs: ["l", "kk", "k"]]])
     // args: process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, Closure preprocess
     map_call_process(DUMMY_PROCESS_INDEX,
@@ -118,4 +118,24 @@ workflow MAP_CALL_PROCESS {
                      ["out1", "out2"],
                      "_dummy_process_index") { ref, meta -> [ref, meta.input2] }
         .view()
+}
+
+process UNARY_PROCESS {
+    input:
+    val(x)
+
+    output:
+    tuple val(x), path('out')
+
+    script:
+    """
+    echo \$RANDOM > out
+    """
+}
+
+workflow HASHLESS_UUID {
+    def hash1 = hashless_uuid()
+    def hash2 = hashless_uuid()
+    ch = Channel.fromList([hash1, hash2, hash1])
+    UNARY_PROCESS(ch).view()
 }
