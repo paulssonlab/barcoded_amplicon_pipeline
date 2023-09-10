@@ -20,8 +20,8 @@ static def exemplar(obj) {
 
 }
 
-static def file_in_dir(dir, filename) {
-    file(Paths.get(dir as String, filename as String))
+static def file_in_dir(Object... paths) {
+    file(Paths.get(*paths.collect { it as String }))
 }
 
 static boolean is_dir_empty(dir) {
@@ -99,13 +99,16 @@ static def find_inputs(ch, base, input_names) {
     }
 }
 
-static def chunk_files(files, chunk_bytes = 0, chunk_files = 0) {
-    if (chunk_bytes && !chunk_files) {
+static def chunk_files(files, max_files = 0, max_bytes = 0) {
+    if (max_files && !max_bytes) {
+        def chunk_size = Math.ceil(files.size / (max_files as int)) as int
+        files.collate(chunk_size)
+    } else if (!max_files && max_bytes) {
         def chunks = [[]]
         def bytes = 0
         files.each {
             def file_bytes = it.size()
-            if (bytes + file_bytes >= chunk_bytes) {
+            if (bytes + file_bytes >= max_bytes) {
                 chunks << []
                 bytes = 0
             }
@@ -113,10 +116,8 @@ static def chunk_files(files, chunk_bytes = 0, chunk_files = 0) {
             chunks[-1] << it
         }
         chunks
-    } else if (chunk_files && !chunk_bytes) {
-        files.collate(chunk_files as int)
     } else {
-        throw new Exception("exactly one of chunk_bytes, chunk_files must be specified")
+        throw new Exception("exactly one of max_files, max_bytes must be specified")
     }
 }
 
@@ -148,8 +149,8 @@ static def stringify(str) {
 // equivalent to ch_a.cross(ch_b) but optionally allows stringifying keys
 static def cross(ch_a, ch_b, stringify_keys = true) {
     if (stringify_keys) {
-        ch_a = ch_a.map { [stringify(it[0]), *it[1..-1]] }
-        ch_b = ch_b.map { [stringify(it[0]), *it[1..-1]] }
+        ch_a = ch_a.map { [stringify(it[0]), *it.drop(1)] }
+        ch_b = ch_b.map { [stringify(it[0]), *it.drop(1)] }
     }
     ch_a.cross(ch_b)
 }
@@ -231,7 +232,7 @@ static def collect_closures(map, Object... args) {
 
 // see below. call_closure is the same as call_process except it does not uniquify the channel
 // sent to the process.
-static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, when = null, passthrough = true, stringify_keys = true, Closure preprocess) {
+static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, when = null, passthrough = true, stringify_keys = true, avoid_singleton_tuples = true, Closure preprocess) {
 // static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys, Closure when, passthrough = true, stringify_keys = true, Closure preprocess) {
     if (!(output_keys instanceof List)) {
         throw new Exception("output_keys must be a List")
@@ -250,14 +251,22 @@ static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys
             // we could use preprocess(it) and collect_closures(..., it) here,
             // but that would allow the process to depend on information
             // beyond what's contained in the join keys
-            [[*:join_map_,
-              *:collect_closures(closure_map, join_map_)], *preprocess(join_map_)]
+            def process_input = [[*:join_map_, *:collect_closures(closure_map, join_map_)],
+                                 *preprocess(join_map_)]
+            // processes can't accept single-element tuples, so send bare map instead
+            (process_input.size == 1 && avoid_singleton_tuples) ? process_input[0] : process_input
         }
-    def ch_processed = closure(ch_input).map { [remove_keys(it[0], closure_map.keySet()), *it[1..-1]] }
+    def ch_processed = closure(ch_input).map {
+        // processes can't output single-element tuples, so wrap it first
+        if (output_keys.size == 0 && avoid_singleton_tuples) {
+            it = [it]
+        }
+        [remove_keys(it[0], closure_map.keySet()), *it.drop(1)]
+    }
     def ch_orig = ch.map { [it.subMap(join_keys), it] }
     return cross(ch_processed, ch_orig, stringify_keys)
         .map {
-            [*:it[1][1], *:[output_keys, it[0][1..-1]].transpose().collectEntries()]
+            [*:it[1][1], *:[output_keys, it[0].drop(1)].transpose().collectEntries()]
         }
         .mix(ch_passthrough)
 }
@@ -271,11 +280,11 @@ static def call_closure(Closure closure, ch, join_keys, closure_map, output_keys
 // closure_map is a way of adding additional keys to meta derived from only the information
 // in join_keys. the purpose is to allow using processes that expect extra keys in meta
 // without having to modify the process itself.
-static def call_process(process, ch, join_keys, closure_map, output_keys, when = null, passthrough = true, stringify_keys = true, Closure preprocess) {
+static def call_process(process, ch, join_keys, closure_map, output_keys, when = null, passthrough = true, stringify_keys = true, avoid_singleton_tuples = true, Closure preprocess) {
 // static def call_process(process, ch, join_keys, closure_map, output_keys, Closure when, passthrough = true, stringify_keys = true, Closure preprocess) {
     // TODO: not sure why { process(it.unique()) } doesn't work
     // call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, when, passthrough, stringify_keys, preprocess)
-    call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, when, passthrough, stringify_keys, preprocess)
+    call_closure({ it.unique() | process }, ch, join_keys, closure_map, output_keys, when, passthrough, stringify_keys, avoid_singleton_tuples, preprocess)
 }
 
 // based on nextflow.extension.GroupKey
@@ -337,7 +346,7 @@ static def hashless_uuid() {
 // and not just the mapped value itself, although this may prevent deduplicating process calls
 // temp_key is an arbitrary unique string and is used as a prefix for keys that are
 // temporarily added to the map that is passed through process
-static def map_call_process(process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, passthrough = true, Closure preprocess) {
+static def map_call_process(process, ch, join_keys, closure_map, map_input_key, output_keys, temp_key, stringify_keys = true, passthrough = true, avoid_singleton_tuples = true, Closure preprocess) {
     if (!(output_keys instanceof List)) {
         throw new Exception("output_keys must be a List")
     }
@@ -384,11 +393,17 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
     def ch_process_groups = ch_input_transposed_with_key.groupTuple(by: 0)
     def ch_process_input = ch_process_groups.map { process_input, keys ->
         // we have to store the list of UUIDs in the map so that we have it in the process output
-        [[*:process_input[0], (temp_uuids_key):keys], *process_input[1..-1]]
+        def process_input_with_key = [[*:process_input[0], (temp_uuids_key):keys], *process_input.drop(1)]
+        // processes can't accept single-element tuples, so send bare map instead
+        (process_input.size == 1 && avoid_singleton_tuples) ? process_input_with_key[0] : process_input_with_key
     }
     def ch_process_output = ch_process_input | process
     // we need to pull out the list of UUIDs and put it in a tuple so we can transpose
     def ch_output_untransposed = ch_process_output.map {
+        // processes can't output single-element tuples, so wrap it first
+        if (output_keys.size == 0 && avoid_singleton_tuples) {
+            it = [it]
+        }
         [it[0].get(temp_uuids_key), it]
     }
     def ch_output_transposed = ch_output_untransposed.transpose(by: 0)
@@ -403,7 +418,7 @@ static def map_call_process(process, ch, join_keys, closure_map, map_input_key, 
     }
     def ch_output = ch_output_joined.map { input, output ->
         // make a map from input_value => (output1, output2, ...)
-        def outputs_by_mapped_values = output.collectEntries { [(it[0].get(temp_mapped_value_key)): it[1..-1]] }
+        def outputs_by_mapped_values = output.collectEntries { [(it[0].get(temp_mapped_value_key)): it.drop(1)] }
         // make output collections ordered according to the input collection
         def new_output = output_keys.withIndex().collectEntries { output_key, idx ->
             [(output_key): input.get(map_input_key).collect { mapped_value ->

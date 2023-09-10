@@ -1,5 +1,6 @@
 process POD5_MERGE {
     tag "$meta.id"
+    label "pod5"
 
     input:
     tuple val(meta), path(pod5, stageAs: "?.pod5")
@@ -17,6 +18,7 @@ process POD5_MERGE {
 
 process POD5_VIEW {
     tag "$meta.id"
+    label "pod5"
 
     input:
     tuple val(meta), path(pod5, stageAs: "?.pod5")
@@ -34,6 +36,7 @@ process POD5_VIEW {
 
 process POD5_FILTER {
     tag "$meta.id"
+    label "pod5"
 
     input:
     tuple val(meta), path(pod5, stageAs: "?.pod5"), path(read_ids)

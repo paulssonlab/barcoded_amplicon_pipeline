@@ -1,5 +1,6 @@
 process DORADO_DOWNLOAD {
     tag "$meta.id"
+    label "local"
 
     input:
     tuple val(meta), val(model)
@@ -18,6 +19,10 @@ process DORADO_DOWNLOAD {
 
 process DORADO_DUPLEX {
     tag "$meta.id"
+    label "dorado_gpu"
+    cpus = 2 // TODO: useful?
+    time = 3.hours // TODO: adjust based on total input file size
+    memory = 16.GB
 
     input:
     tuple val(meta), path("pod5/?.pod5"), path(dorado_model), path(dorado_duplex_model)
@@ -30,6 +35,11 @@ process DORADO_DUPLEX {
 
     script:
     """
+    # TODO
+    echo -n HOSTNAME:
+    hostname -a
+    module load gcc/9.2.0
+    module load cuda/11.7
     dorado duplex ${meta.dorado_duplex_args ?: ""} ${dorado_model} pod5 > ${meta.id}.bam
     """
 }
@@ -48,6 +58,9 @@ process DORADO_BASECALLER {
 
     script:
     """
+    # TODO
+    module load gcc/9.2.0
+    module load cuda/11.7
     dorado basecaller ${meta.dorado_basecaller_args ?: ""} ${dorado_model} pod5 > ${meta.id}.bam
     """
 }

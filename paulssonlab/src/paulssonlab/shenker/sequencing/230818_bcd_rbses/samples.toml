@@ -2,14 +2,19 @@
 fastq_input = "fastq_pass/*.fastq.gz"
 pod5_input = "pod5_pass/*.pod5"
 #pod5_chunk_bytes = 1073741824 # 1 GB
-pod5_chunk_files = 3
+pod5_chunk_bytes = 10737418240 # 10 GB
+#pod5_chunk_files = 100
 pod5_split = true
+#pod5_split_chunks = 100
 #pod5_split_by = ["channel", "mux"]
 basecall = true
 duplex = true
+dorado_job_bytes = 107374182400 # 100 GB
+#dorado_jobs = 10
 dorado_model = "dna_r10.4.1_e8.2_400bps_sup@v4.2.0"
 dorado_duplex_model = "dna_r10.4.1_e8.2_5khz_stereo@v1.1"
 medaka_consensus_model = "r1041_e82_400bps_sup_v4.2.0"
 # TODO for testing
-dorado_duplex_args = "-x cpu"
-dorado_basecaller_args = "-x cpu"
+#dorado_duplex_args = "-x cpu"
+#dorado_basecaller_args = "-x cpu"
+publish_bam = true
