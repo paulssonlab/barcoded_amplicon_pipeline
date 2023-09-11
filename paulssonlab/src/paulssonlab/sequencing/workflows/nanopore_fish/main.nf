@@ -1,6 +1,3 @@
-import java.nio.file.Files
-import java.nio.file.Paths
-import java.nio.file.StandardCopyOption
 import static functions.*
 
 include { POD5_MERGE; POD5_VIEW; POD5_FILTER; SPLIT_READ_IDS } from '../../modules/pod5.nf'
