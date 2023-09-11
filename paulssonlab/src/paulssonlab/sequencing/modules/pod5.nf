@@ -1,6 +1,6 @@
 process POD5_MERGE {
     tag "$meta.id"
-    label "pod5"
+    // time = 30.min
 
     input:
     tuple val(meta), path(pod5, stageAs: "?.pod5")
@@ -18,7 +18,7 @@ process POD5_MERGE {
 
 process POD5_VIEW {
     tag "$meta.id"
-    label "pod5"
+    // time = 30.min
 
     input:
     tuple val(meta), path(pod5, stageAs: "?.pod5")
@@ -36,7 +36,9 @@ process POD5_VIEW {
 
 process POD5_FILTER {
     tag "$meta.id"
-    label "pod5"
+    cpus = 2
+    time = 3.hour
+    memory = 40.GB
 
     input:
     tuple val(meta), path(pod5, stageAs: "?.pod5"), path(read_ids)
@@ -48,12 +50,13 @@ process POD5_FILTER {
 
     script:
     """
-    pod5 filter -t ${task.cpus} ${meta.pod5_filter_args ?: ""} -i ${read_ids} -o ${meta.id}.pod5 ${pod5}
+    pod5 filter -t ${task.cpus+1} ${meta.pod5_filter_args ?: ""} -i ${read_ids} -o ${meta.id}.pod5 ${pod5}
     """
 }
 
 process SPLIT_READ_IDS {
     tag "$meta.id"
+    // time = 30.min
 
     input:
     tuple val(meta), path(tsv)

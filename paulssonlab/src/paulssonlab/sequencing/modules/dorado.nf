@@ -21,8 +21,10 @@ process DORADO_DUPLEX {
     tag "$meta.id"
     label "dorado_gpu"
     cpus = 2 // TODO: useful?
-    time = 3.hours // TODO: adjust based on total input file size
-    memory = 16.GB
+    time = 12.hours // TODO: adjust based on total input file size
+    memory = 32.GB
+    scratch true
+    stageInMode "copy"
 
     input:
     tuple val(meta), path("pod5/?.pod5"), path(dorado_model), path(dorado_duplex_model)

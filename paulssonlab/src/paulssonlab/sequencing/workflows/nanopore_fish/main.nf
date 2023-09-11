@@ -77,7 +77,7 @@ workflow NANOPORE_FISH {
         .set { ch_do_pod5_split }
     ch_do_pod5_split.yes.map {
             def pod5_split_by = it.get("pod5_split_by") ?: ["channel"]
-            def pod5_split_chunks = it.get("pod5_split_chunks") ?: 100
+            def pod5_split_chunks = it.get("pod5_split_chunks") ?: 400
             [*:it,
              pod5_split_by: pod5_split_by,
              split_read_ids_args: "-c ${pod5_split_chunks} -F \"${pod5_split_by.join(',')}\" ${it.get('split_read_ids_args') ?: ''}",
