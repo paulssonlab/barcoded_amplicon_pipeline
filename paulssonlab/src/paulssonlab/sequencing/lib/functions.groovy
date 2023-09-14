@@ -107,13 +107,17 @@ static def chunk_files(files, max_files = 0, max_bytes = 0) {
         def chunks = [[]]
         def bytes = 0
         files.each {
-            def file_bytes = it.size()
+            def file_bytes = (it instanceof Collection) ? it*.size().sum() : it.size()
             if (bytes + file_bytes >= max_bytes) {
                 chunks << []
                 bytes = 0
             }
             bytes += file_bytes
-            chunks[-1] << it
+            if (it instanceof Collection) {
+                chunks[-1].addAll(it)
+            } else {
+                chunks[-1] << it
+            }
         }
         chunks
     } else {
