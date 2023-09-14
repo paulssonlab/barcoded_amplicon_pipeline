@@ -1,18 +1,20 @@
 process POD5_MERGE {
     tag "$meta.id"
-    // time = 30.min
+    time = 1.hour
+    memory = 8.GB
+    // errorStrategy "retry"
 
     input:
-    tuple val(meta), path(pod5, stageAs: "?.pod5")
+    tuple val(meta), path(pod5, stageAs: "pod5/?.pod5")
 
     output:
-    tuple val(meta), path("merged.pod5")
+    tuple val(meta), path("${meta.id}.pod5")
 
     conda "${params.conda_env_dir}/pod5.yml"
 
     script:
     """
-    pod5 merge ${meta.pod5_merge_args ?: ""} -o merged.pod5 ${pod5}
+    pod5 merge ${meta.pod5_merge_args ?: ""} -o ${meta.id}.pod5 pod5
     """
 }
 
@@ -21,7 +23,7 @@ process POD5_VIEW {
     // time = 30.min
 
     input:
-    tuple val(meta), path(pod5, stageAs: "?.pod5")
+    tuple val(meta), path(pod5, stageAs: "pod5/?.pod5")
 
     output:
     tuple val(meta), path("view.tsv")
@@ -30,7 +32,30 @@ process POD5_VIEW {
 
     script:
     """
-    pod5 view -t ${task.cpus} ${meta.pod5_view_args ?: ""} -o view.tsv ${pod5}
+    pod5 view -t ${task.cpus} ${meta.pod5_view_args ?: ""} -o view.tsv pod5
+    """
+}
+
+process POD5_VIEW_AND_SUBSET {
+    tag "$meta.id"
+    time = 1.hour
+    memory = 18.GB
+    errorStrategy "retry"
+    // scratch true
+    // stageInMode "copy"
+
+    input:
+    tuple val(meta), path(pod5, stageAs: "pod5/?.pod5")
+
+    output:
+    tuple val(meta), path("subset/*.pod5")
+
+    conda "${params.conda_env_dir}/pod5.yml"
+
+    script:
+    """
+    pod5 view -t ${task.cpus} ${meta.pod5_view_args ?: ""} -o view.tsv pod5
+    pod5 subset -t ${task.cpus} ${meta.pod5_subset_args ?: ""} -s view.tsv -o subset pod5
     """
 }
 
@@ -41,7 +66,7 @@ process POD5_FILTER {
     memory = 40.GB
 
     input:
-    tuple val(meta), path(pod5, stageAs: "?.pod5"), path(read_ids)
+    tuple val(meta), path(pod5, stageAs: "pod5/?.pod5"), path(read_ids)
 
     output:
     tuple val(meta), path("${meta.id}.pod5")
@@ -50,7 +75,7 @@ process POD5_FILTER {
 
     script:
     """
-    pod5 filter -t ${task.cpus+1} ${meta.pod5_filter_args ?: ""} -i ${read_ids} -o ${meta.id}.pod5 ${pod5}
+    pod5 filter -t ${task.cpus} ${meta.pod5_filter_args ?: ""} -i ${read_ids} -o ${meta.id}.pod5 pod5
     """
 }
 

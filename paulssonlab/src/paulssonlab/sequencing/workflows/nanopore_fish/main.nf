@@ -1,28 +1,9 @@
 import static functions.*
 
-include { POD5_MERGE; POD5_VIEW; POD5_FILTER; SPLIT_READ_IDS } from '../../modules/pod5.nf'
+include { POD5_MERGE; POD5_MERGE as POD5_MERGE2; POD5_VIEW_AND_SUBSET } from '../../modules/pod5.nf'
 include { DORADO_DOWNLOAD;
           DORADO_DOWNLOAD as DORADO_DOWNLOAD2;
           DORADO_DUPLEX; DORADO_BASECALLER } from '../../modules/dorado.nf'
-
-process PUBLISH_BAM {
-    tag "${meta.id}"
-    label "local"
-    cache false
-
-    input:
-    val(meta)
-
-    output:
-    val(meta)
-
-    exec:
-    def output_dir = file_in_dir(meta.output_run_dir, "bam")
-    output_dir.mkdirs()
-    meta.bam.each { bam_file ->
-        bam_file.toRealPath().mklink(file_in_dir(output_dir, bam_file.name), overwrite: true)
-    }
-}
 
 workflow NANOPORE_FISH {
     take:
@@ -30,12 +11,20 @@ workflow NANOPORE_FISH {
 
     main:
     samples_in
-        // TODO
-        // .map {
-        //     edit_key(it, "pod5_input") { l -> l[0..1] }
-        // }
+        .map {
+            if (it.get("basecall") && !it.get("pod5_input")) {
+                throw new Exception("pod5_input must be specified to basecall")
+            }
+            if (it.get("bam_input") && it.get("fastq_input")) {
+                throw new Exception("cannot specify both bam_input and fastq_input")
+            }
+            if (!it.get("basecall") && !it.get("bam_input") && !it.get("fastq_input")) {
+                throw new Exception("bam_input or fastq_input if not basecalling")
+            }
+            it
+        }
         .branch {
-            yes: !((it.containsKey("basecall") && !it["basecall"]) || !it.get("pod5_input"))
+            yes: it.get("basecall")
             no: true
         }
         .set { ch_do_basecall }
@@ -48,27 +37,27 @@ workflow NANOPORE_FISH {
                                             && !it.get("pod5_chunk_files")))
             no: true
         }
-        . set { ch_do_pod5_chunk }
+        .set { ch_do_pod5_chunk }
     ch_do_pod5_chunk.yes.map {
             [*:it, pod5_input_chunked: chunk_files(it["pod5_input"],
                                                    it.get("pod5_chunk_files"),
                                                    it.get("pod5_chunk_bytes"))
             ]
         }
-        . set { ch_pod5_chunked }
+        .set { ch_pod5_chunked }
     map_call_process(POD5_MERGE,
                      ch_pod5_chunked,
                      ["pod5_input_chunked", "pod5_merge_args"],
-                     [id: { pod5, meta -> pod5[0].baseName }],
+                     [id: { pod5, meta -> "${pod5[0].baseName}_merged" }],
                      "pod5_input_chunked",
                      ["pod5_to_split"],
                      "_POD5_MERGE") { pod5, meta -> [pod5] }
-        . set { ch_pod5_merged }
+        .set { ch_pod5_merged }
     ch_pod5_merged.mix(ch_do_pod5_chunk.no.map {
                 [*:it, pod5_to_split: it.get("pod5_input")]
             } )
         .branch {
-            yes: !(it.containsKey("pod5_split") && !it["pod5_split"])
+            yes: it.get("pod5_split")
             no: true
         }
         .set { ch_do_pod5_split }
@@ -77,42 +66,77 @@ workflow NANOPORE_FISH {
             def pod5_split_chunks = it.get("pod5_split_chunks") ?: 400
             [*:it,
              pod5_split_by: pod5_split_by,
-             split_read_ids_args: "-c ${pod5_split_chunks} -F \"${pod5_split_by.join(',')}\" ${it.get('split_read_ids_args') ?: ''}",
-             pod5_view_args: "--include \"${['read_id', *pod5_split_by].join(',')}\" ${it.get('pod5_view_args') ?: ''}"]
+             pod5_view_args: "--include \"${['read_id', *pod5_split_by].join(',')}\" ${it.get('pod5_view_args') ?: ''}",
+             pod5_subset_args: "--columns ${pod5_split_by.join(' ')} ${it.get('pod5_subset_args') ?: ''}"]
         }
         .set { ch_to_pod5_split }
-    call_process(POD5_VIEW,
+    map_call_process(POD5_VIEW_AND_SUBSET,
         ch_to_pod5_split,
-        ["pod5_to_split", "pod5_view_args"],
-        [id: { it.pod5_to_split[0].baseName }],
-        ["pod5_read_list"]) { meta -> [meta.pod5_to_split] }
-        .set { ch_pod5_read_lists }
-    call_process(SPLIT_READ_IDS,
-        ch_pod5_read_lists,
-        ["pod5_read_list", "split_read_ids_args"],
-        [id: { it.pod5_read_list.baseName }],
-        ["pod5_split_read_lists"]) { meta -> [meta.pod5_read_list] }
-        .set { ch_pod5_split_read_lists }
-    map_call_process(POD5_FILTER,
-        // TODO
-        // ch_pod5_split_read_lists.map { edit_key(it, "pod5_split_read_lists") { l -> l[0..10] } },
-        ch_pod5_split_read_lists,
-        ["pod5_to_split", "pod5_filter_args"],
+        ["pod5_to_split", "pod5_view_args", "pod5_subset_args"],
         [id: { read_list, meta -> read_list.baseName }],
-        "pod5_split_read_lists",
+        "pod5_to_split",
         ["pod5_split"],
-        "_POD5_FILTER") { read_list, meta -> [meta.pod5_to_split, read_list] }
+        "_POD5_VIEW_AND_SUBSET") { pod5_to_split, meta -> [pod5_to_split] }
         .set { ch_pod5_split }
-    ch_pod5_split.map {
-        [*:it, pod5: it.get("pod5_split")]
-    }
+    ch_pod5_split.map { meta ->
+            [*:meta, pod5_split_to_chunk: meta.pod5_split.flatten()
+                                                         .groupBy { it.baseName }
+                                                         .values()
+                                                         .collect { it.sort() }
+                                                         .sort() { it[0] }
+            ]
+        }
+        .set { ch_to_pod5_split_merge }
+    ch_to_pod5_split_merge.branch {
+            // chunk pod5 files UNLESS:
+            // map contains the key pod5_chunk and it is false
+            // OR both pod5_chunk_bytes and pod5_chunk_files are falsy
+            yes: !((it.containsKey("pod5_chunk") && !it["pod5_chunk"])
+                                        || (!it.get("pod5_chunk_bytes")
+                                            && !it.get("pod5_chunk_files")))
+            no: true
+        }
+        .set { ch_do_pod5_split_chunk }
+    ch_do_pod5_split_chunk.yes.map {
+            [*:it, pod5_split_to_merge: chunk_files(it["pod5_split_to_chunk"],
+                                                   it.get("pod5_chunk_files"),
+                                                   it.get("pod5_chunk_bytes"))
+            ]
+        }
+        .set { ch_pod5_split_chunked }
+    ch_pod5_split_chunked.mix(ch_do_pod5_split_chunk.no.map {
+            [*:it, pod5_split_to_merge: it["pod5_split_to_chunk"]]
+        } )
+    map_call_process(POD5_MERGE2,
+                     ch_pod5_split_chunked,
+                     ["pod5_split_to_merge", "pod5_merge_args"],
+                     [id: { pod5, meta -> "${pod5[0].baseName}_merged" }],
+                     "pod5_split_to_merge",
+                     ["pod5_split_merged"],
+                     "_POD5_MERGE2") { pod5, meta -> [pod5] }
+        .set { ch_pod5_split_merged }
+    ch_pod5_split_merged
+        .map {
+            [*:it, pod5: it.get("pod5_split_merged")]
+        }
         .mix(ch_do_pod5_split.no.map { [*:it, pod5: it.get("pod5_to_split")] })
         .set { ch_pod5 }
-    ch_pod5.map {
-        if (it.get("dorado_job_bytes") || it.get("dorado_jobs")) {
-            [*:it, pod5_unchunked: it["pod5"], pod5: chunk_files(it["pod5"], it.get("dorado_jobs"), it.get("dorado_job_bytes"))]
+    ch_pod5.subscribe {
+            if (it.get("publish_pod5")) {
+                def output_dir = file_in_dir(it.output_run_dir, "pod5")
+                output_dir.mkdirs()
+                it.pod5.each { pod5_file ->
+                    pod5_file.toRealPath().mklink(file_in_dir(output_dir, pod5_file.name), overwrite: true)
+                }
+            }
         }
-    }
+    ch_pod5.map {
+            if (it.get("dorado_job_bytes") || it.get("dorado_jobs")) {
+                [*:it, pod5_unchunked: it["pod5"], pod5: chunk_files(it["pod5"], it.get("dorado_jobs"), it.get("dorado_job_bytes"))]
+            } else {
+                it
+            }
+        }
         .set { ch_pod5_chunked }
     call_process(DORADO_DOWNLOAD,
         ch_pod5_chunked,
@@ -132,8 +156,6 @@ workflow NANOPORE_FISH {
         ["dorado_duplex_model_dir"]) { meta -> [meta.dorado_duplex_model] }
         .set { ch_dorado_duplex_model }
     map_call_process(DORADO_DUPLEX,
-        //TODO
-        // ch_dorado_duplex_model.map { edit_key(it, "pod5") { l -> l[0..1] } },
         ch_dorado_duplex_model,
         ["pod5", "dorado_model_dir", "dorado_duplex_model_dir", "dorado_duplex_args"],
         [id: { pod5, meta -> exemplar(pod5).baseName }],
@@ -151,26 +173,14 @@ workflow NANOPORE_FISH {
         .set { ch_dorado_basecaller }
     ch_dorado_basecaller.mix(ch_dorado_duplex)
         .set { ch_basecalled }
-    // // ch_basecalled
-    // //     .subscribe {
-    // //         def output_dir = file_in_dir(it.output_run_dir, "bam")
-    // //         output_dir.mkdirs()
-    // //         it.bam.collect { bam_file ->
-    // //             bam_file.toRealPath.mklink(file_in_dir(output_dir, bam_file.name), overwrite: true)
-    // //         }
-    // //     }
-    ch_basecalled.branch {
-        yes: it.get("publish_bam")
-        no: true
-    }
-        .set { ch_do_publish_bam }
-    call_process(PUBLISH_BAM,
-        ch_do_publish_bam.yes,
-        ["bam", "output_run_dir"],
-        [id: { it.output_run_dir }],
-        []) { meta -> [] }
-        .set { ch_bam_published }
-    ch_bam_published.mix(ch_do_publish_bam.no)
+    ch_basecalled.subscribe {
+            def output_dir = file_in_dir(it.output_run_dir, "bam")
+            output_dir.mkdirs()
+            it.bam.collect { bam_file ->
+                bam_file.toRealPath.mklink(file_in_dir(output_dir, bam_file.name), overwrite: true)
+            }
+        }
+    ch_basecalled
         .set { samples }
 
     // publish fastq.gz (publish_fastq)
@@ -209,7 +219,6 @@ workflow NANOPORE_FISH {
 
     emit:
     samples
-
 }
 
 workflow MAIN {

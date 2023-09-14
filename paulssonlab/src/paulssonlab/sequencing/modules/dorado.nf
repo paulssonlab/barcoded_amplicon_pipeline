@@ -21,10 +21,11 @@ process DORADO_DUPLEX {
     tag "$meta.id"
     label "dorado_gpu"
     cpus = 2 // TODO: useful?
-    time = 12.hours // TODO: adjust based on total input file size
+    time = 2.hours // TODO: adjust based on total input file size
     memory = 32.GB
-    scratch true
-    stageInMode "copy"
+    errorStrategy "retry"
+    // scratch true
+    // stageInMode "copy"
 
     input:
     tuple val(meta), path("pod5/?.pod5"), path(dorado_model), path(dorado_duplex_model)
@@ -37,11 +38,13 @@ process DORADO_DUPLEX {
 
     script:
     """
-    # TODO
-    echo -n HOSTNAME:
-    hostname -a
     module load gcc/9.2.0
     module load cuda/11.7
+    # TODO
+    echo -n "HOSTNAME: "
+    hostname -a
+    echo -n "GPU: "
+    nvidia-smi --query-gpu=name --format=csv,noheader
     dorado duplex ${meta.dorado_duplex_args ?: ""} ${dorado_model} pod5 > ${meta.id}.bam
     """
 }
