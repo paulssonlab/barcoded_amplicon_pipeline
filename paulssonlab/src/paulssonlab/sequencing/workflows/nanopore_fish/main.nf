@@ -177,7 +177,7 @@ workflow NANOPORE_FISH {
             def output_dir = file_in_dir(it.output_run_dir, "bam")
             output_dir.mkdirs()
             it.bam.collect { bam_file ->
-                bam_file.toRealPath.mklink(file_in_dir(output_dir, bam_file.name), overwrite: true)
+                bam_file.toRealPath().mklink(file_in_dir(output_dir, bam_file.name), overwrite: true)
             }
         }
     ch_basecalled
