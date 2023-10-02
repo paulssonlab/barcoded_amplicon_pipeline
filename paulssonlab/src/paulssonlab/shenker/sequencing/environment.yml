@@ -4,7 +4,9 @@ channels:
   - bioconda
   - defaults
 dependencies:
+  - biopython
   - black
+  - cytoolz
   - gfapy
   - holoviews
   - hvplot
@@ -13,8 +15,10 @@ dependencies:
   - jupyterlab
   - jupyterlab_code_formatter
   - matplotlib
+  - networkx
   - nextflow
   - pandas
   - pyarrow
+  - pyfaidx
   - python
   - tqdm
