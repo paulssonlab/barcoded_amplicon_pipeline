@@ -1,8 +1,9 @@
 from collections.abc import Mapping, Sequence
+from functools import partial
 from itertools import zip_longest
 from numbers import Number
 
-from cytoolz import compose, partial
+from cytoolz import compose
 
 
 def any_none(*args):
