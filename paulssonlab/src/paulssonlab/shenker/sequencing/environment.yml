@@ -18,7 +18,9 @@ dependencies:
   - networkx
   - nextflow
   - pandas
+  - pip
+  - pip:
+      - pyfastx
   - pyarrow
-  - pyfaidx
   - python
   - tqdm
