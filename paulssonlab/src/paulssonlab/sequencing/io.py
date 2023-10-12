@@ -164,7 +164,11 @@ def iter_bam_and_gaf(
             bam_columns["read_seq"].append(read.query_sequence)
             bam_columns["read_phred"].append(np.asarray(read.query_qualities))
             for tag in tags:
-                bam_columns[tag].append(read.get_tag(tag))
+                try:
+                    tag_value = read.get_tag(tag)
+                except KeyError:
+                    tag_value = None
+                bam_columns[tag].append(tag_value)
         columns = dict(zip(batch.column_names, batch.columns))
         for col_name, col_type in bam_types.items():
             columns[col_name] = pa.array(bam_columns[col_name], col_type)
