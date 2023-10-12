@@ -37,6 +37,7 @@ DEFAULT_BAM_TAGS = {
     "dx": pa.int8(),
     "ch": pa.uint16(),
     "mx": pa.uint8(),
+    "pi": pa.string(),
 }
 
 
@@ -187,7 +188,11 @@ def iter_bam_and_gaf(
                     bam_columns["read_seq"].append(read.query_sequence)
                     bam_columns["read_phred"].append(read.query_qualities)
                     for tag in tags:
-                        bam_columns[tag].append(read.get_tag(tag))
+                        try:
+                            tag_value = read.get_tag(tag)
+                        except KeyError:
+                            tag_value = None
+                        bam_columns[tag].append(tag_value)
                     num_reads += 1
                     break
             else:
