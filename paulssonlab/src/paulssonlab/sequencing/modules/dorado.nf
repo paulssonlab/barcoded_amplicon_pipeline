@@ -21,8 +21,8 @@ process DORADO_DUPLEX {
     tag "$meta.id"
     label "dorado_gpu"
     cpus = 2 // TODO: useful?
-    time = 2.hours // TODO: adjust based on total input file size
-    memory = 32.GB
+    time = 90.min // TODO: adjust based on total input file size
+    memory = 38.GB
     errorStrategy "retry"
     // scratch true
     // stageInMode "copy"
