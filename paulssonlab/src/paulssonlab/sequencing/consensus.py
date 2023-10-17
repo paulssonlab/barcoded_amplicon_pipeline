@@ -1,9 +1,65 @@
 import awkward as ak
 import numba
 import numpy as np
+import pyarrow as pa
+
+from paulssonlab.util.sequence import reverse_complement
+
+try:
+    import pyabpoa
+except ImportError:
+    pass
+
+try:
+    import spoa
+except ImportError:
+    pass
 
 GAP_CHAR = ord("-")
 SPACE_CHAR = ord(" ")
+
+# SEE: https://github.com/yangao07/abPOA/tree/main/python
+ABPOA_DEFAULTS = {"aln_mode": "l"}
+# SEE: https://github.com/rvaser/spoa
+# AND https://github.com/nanoporetech/pyspoa/blob/master/pyspoa.cpp
+SPOA_DEFAULTS = {}
+
+
+def prepare_reads(seqs, rcs, phreds=None):
+    if isinstance(seqs, pa.Array):
+        seqs = seqs.to_pylist()  # prefer seqs to be given as a python list
+    if isinstance(rcs, pa.Array):
+        rcs = ak.from_arrow(rcs)
+    seqs_oriented = [
+        reverse_complement(seq) if rc else seq for seq, rc in zip(seqs, rcs)
+    ]
+    if phreds is not None:
+        phreds_oriented = ak.from_arrow(
+            pa.array(
+                [
+                    phred.values.to_numpy()[::-1] if rc else phred.values.to_numpy()
+                    for phred, rc in zip(phreds, rcs)
+                ]
+            )
+        )
+        return seqs_oriented, phreds_oriented
+    else:
+        return seqs_oriented
+
+
+def msa(seqs, method="abpoa", **kwargs):
+    if method == "abpoa":
+        aligner = pyabpoa.msa_aligner(**{**ABPOA_DEFAULTS, **kwargs})
+        res = aligner.msa(seqs, out_cons=False, out_msa=True)
+        msa_seqs = res.msa_seq
+    elif method == "spoa":
+        _, msa_seqs = spoa.poa(seqs, **{**SPOA_DEFAULTS, **kwargs})
+    else:
+        raise ValueError(f"method must be one of: abpoa, spoa")
+    msa_seqs = np.array(
+        [np.frombuffer(seq.encode(), dtype=np.uint8) for seq in msa_seqs]
+    )
+    return msa_seqs
 
 
 @numba.njit(nogil=True)
