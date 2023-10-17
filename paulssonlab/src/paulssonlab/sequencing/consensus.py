@@ -87,7 +87,7 @@ def align_phreds(seqs, phreds, gap_quality_method="mean"):
                 phred = unaligned_phred[base_idx - offset]
                 aligned_phred[base_idx] = phred
                 last_nongap_phred = phred
-        last_nongap_phred = -1
+        # let last_nongap_phred carry over
         # numba doesn't support reversed(range(msa_length))
         for base_idx in range(msa_length - 1, -1, -1):
             base = aligned_seq[base_idx]
@@ -117,7 +117,7 @@ def align_phreds(seqs, phreds, gap_quality_method="mean"):
 def phred_weighted_consensus(seqs, phreds, gap_quality_method="mean"):
     num_seqs = len(seqs)
     if not num_seqs:
-        return
+        return None, None, None, None
     msa_length = len(seqs[0])
     aligned_phred = np.empty(msa_length, dtype=np.int32)
     votes = [
@@ -141,7 +141,7 @@ def phred_weighted_consensus(seqs, phreds, gap_quality_method="mean"):
                 phred = unaligned_phred[base_idx - offset]
                 aligned_phred[base_idx] = phred
                 last_nongap_phred = phred
-        last_nongap_phred = -1
+        # let last_nongap_phred carry over
         # numba doesn't support reversed(range(msa_length))
         for base_idx in range(msa_length - 1, -1, -1):
             base = aligned_seq[base_idx]
@@ -173,7 +173,9 @@ def phred_weighted_consensus(seqs, phreds, gap_quality_method="mean"):
     consensus_phred = np.empty(msa_length, dtype=np.int32)
     nonconsensus_phred = np.zeros(msa_length, dtype=np.int32)
     for base_idx in range(msa_length):
-        sorted_votes = sorted([(v, k) for k, v in votes[base_idx].items()])
+        sorted_votes = sorted(
+            [(v, k) for k, v in votes[base_idx].items()], reverse=True
+        )
         consensus[base_idx] = sorted_votes[0][1]
         consensus_phred[base_idx] = sorted_votes[0][0]
         if len(sorted_votes) >= 2:
@@ -185,6 +187,13 @@ def phred_weighted_consensus(seqs, phreds, gap_quality_method="mean"):
                 p += v[0]
             nonconsensus_phred[base_idx] = p
     return consensus, consensus_phred, nonconsensus, nonconsensus_phred
+
+
+def chars_to_str(ary, gaps=False):
+    seq = ary.tobytes().decode()
+    if not gaps:
+        seq = seq.replace("-", "")
+    return seq
 
 
 def print_msa(seqs, phreds=None):
