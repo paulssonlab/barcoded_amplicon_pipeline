@@ -41,7 +41,7 @@ def write_bam_and_gaf(
     table = pa.Table.from_batches(iter_bam_and_gaf(bam_filename, gaf_filename))
     # can't do this streaming because we need to unify dictionaries
     table = table.unify_dictionaries()
-    table = fix_dx(table)
+    table = fix_dx(table)  # TODO
     if format == "arrow":
         with pa.ipc.new_file(
             output_filename,
