@@ -7,6 +7,9 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.csv as csv
 
+sys.path.append(str(Path(__file__).parents[3]))
+from paulssonlab.util.cli import split_delimited_list
+
 
 def write_read_ids(tsv_filename, output_dir, fields, chunks):
     if not fields:
@@ -55,17 +58,14 @@ def write_read_ids(tsv_filename, output_dir, fields, chunks):
             file.close()
 
 
-def _split_delimited_list(ctx, param, value):
-    return [c.strip() for c in value.split(",")]
-
-
 @click.command()
 @click.option(
     "-F",
     "--fields",
     default=[],
+    multiple=True,
     show_default=True,
-    callback=_split_delimited_list,
+    callback=split_delimited_list,
 )
 @click.option(
     "-c", "--chunks", type=click.IntRange(min=0), default=0, show_default=True
