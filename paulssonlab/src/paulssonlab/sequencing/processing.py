@@ -15,7 +15,7 @@ def _reverse_segment(s):
 def _segments_for_normalize_path(forward_segments):
     segment_names = [s[1:] for s in forward_segments]
     path_filter = [f"{o}{s}" for s in segment_names for o in "><"]
-    reverse_segments = [[_reverse_segment(s) for s in segment_names] for o in "><"]
+    reverse_segments = [_reverse_segment(s) for s in forward_segments for o in "><"]
     reverse_path_mapping = {
         f"{o[0]}{s}": f"{o[1]}{s}" for s in segment_names for o in ["<>", "><"]
     }
@@ -28,8 +28,11 @@ def normalize_path(
     keep_unaligned=False,
     endpoints=None,
 ):
-    if endpoints and len(endpoints) != 2:
-        raise ValueError("endpoints should contain two iterables of segment names")
+    if endpoints:
+        if len(endpoints) != 2:
+            raise ValueError("endpoints should contain two lists of segment names")
+        if not endpoints[0] or not endpoints[1]:
+            raise ValueError(f"both lists of endpoints must be non-empty: {endpoints}")
     (
         path_filter,
         reverse_segments,
@@ -39,7 +42,11 @@ def normalize_path(
         df.rename({"path": "full_path"})
         # .is_first_distinct() picks better (primary) alignment instead of alternate alignment
         # if input is in GAF order
-        .filter(pl.col("name").is_first_distinct())
+        # .filter(pl.col("name").is_first_distinct())
+        # TODO: polars bug, is_first_distinct() returns empty dataframe
+        # when used in a more complicated lazy query,
+        # exact cause unknown
+        .filter(pl.col("name").is_duplicated().not_())
         .with_columns(
             pl.col("full_path")
             .list.set_intersection(path_filter)
@@ -102,7 +109,7 @@ def identify_usable_reads(df):
         .select(pl.col("name"), pl.col("parent_names").alias("_parent_name"))
         .explode("_parent_name")
         .join(
-            df_path.select(pl.col("name", "path")),
+            df.select(pl.col("name", "path")),
             how="left",
             left_on=pl.col("_parent_name"),
             right_on=pl.col("name"),

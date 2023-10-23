@@ -105,7 +105,7 @@ def gfa_endpoints(gfa):
 def dag_forward_segments(graph, wccs=None):
     if wccs is None:
         wccs = nx.weakly_connected_components(graph)
-    return max(wccs, key=lambda wcc: sum(s[0] == ">" for s in wcc))
+    return list(max(wccs, key=lambda wcc: sum(s[0] == ">" for s in wcc)))
 
 
 def gfa_forward_segments(gfa):
