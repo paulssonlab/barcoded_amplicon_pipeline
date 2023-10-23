@@ -97,7 +97,7 @@ def join_reads_and_gaf(
 @click.option("--include-unaligned/--no-include-unaligned", default=True)
 @click.argument("reads", type=click.Path(exists=True, dir_okay=False))
 @click.argument("gaf", type=click.Path(exists=True, dir_okay=False))
-@click.argument("output", type=click.Path(exists=False))
+@click.argument("output", type=click.Path())
 def cli(reads, gaf, output, input_format, output_format, include_unaligned):
     join_reads_and_gaf(
         reads,
