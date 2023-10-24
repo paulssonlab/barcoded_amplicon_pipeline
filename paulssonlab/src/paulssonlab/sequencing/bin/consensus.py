@@ -24,7 +24,13 @@ def compute_consensus_seqs(
     min_depth=None,
     min_simplex_depth=None,
     min_duplex_depth=None,
+    method="abpoa",
+    use_phreds=None,
+    output_phreds=None,
+    consensus_kwargs={},
 ):
+    if fastq_filename and not output_phreds:
+        raise ValueError("cannot output fastq without --output-phreds")
     # detect format based on first of potentially many filenames/glob patterns
     input_format = detect_format(
         input_format, input_filename[0], ["arrow", "parquet"], glob=True
@@ -51,13 +57,29 @@ def compute_consensus_seqs(
         exprs.append(pl.col("duplex_depth") > min_duplex_depth)
     if exprs:
         df = df.filter(*exprs)
-    df = map_read_groups(df, partial(get_consensus_group_by, return_phreds=True))
+    df = map_read_groups(
+        df,
+        partial(
+            get_consensus_group_by,
+            method=method,
+            use_phreds=use_phreds,
+            return_phreds=output_phreds,
+            **consensus_kwargs,
+        ),
+    )
     # TODO: try streaming?
     df = df.collect()
     if fasta_filename:
-        write_fastx(fasta_filename, df.get_column("consensus_seq"))
+        write_fastx(
+            fasta_filename, df.get_column("consensus_seq"), names=df.get_column("name")
+        )
     if fastq_filename:
-        write_fastx(fastq_filename, df.get_column("consensus_phred"))
+        write_fastx(
+            fastq_filename,
+            df.get_column("consensus_seq"),
+            phreds=df.get_column("consensus_phred"),
+            names=df.get_column("name"),
+        )
     if output_format == "arrow":
         df.write_ipc(output_filename)
     elif output_format == "parquet":
@@ -70,6 +92,20 @@ def _parse_group(ctx, param, value):
         return tuple(int(num.strip()) for num in value.split("/"))
     except:
         raise click.BadParameter("expecting --group <group_id>/<num_groups>")
+
+
+def _parse_params(ctx, param, value):
+    d = {}
+    for k, v in value:
+        try:
+            v = int(v)
+        except:
+            try:
+                v = float(v)
+            except:
+                pass
+        d[k] = v
+    return d
 
 
 @click.command()
@@ -90,6 +126,10 @@ def _parse_group(ctx, param, value):
 @click.option("--min-depth", type=int)
 @click.option("--min-simplex-depth", type=int)
 @click.option("--min-duplex-depth", type=int)
+@click.option("--method", type=click.Choice(["abpoa", "spoa"]), default="abpoa")
+@click.option("--use-phreds/--no-use-phreds", default=False)  # TODO
+@click.option("--output-phreds/--no-output-phreds", default=True)  # TODO
+@click.option("-p", "--param", type=(str, str), multiple=True, callback=_parse_params)
 @click.argument("input", type=str, nargs=-1)
 def cli(
     input,
@@ -102,6 +142,10 @@ def cli(
     min_depth,
     min_simplex_depth,
     min_duplex_depth,
+    method,
+    use_phreds,
+    output_phreds,
+    param,
 ):
     compute_consensus_seqs(
         input,
@@ -114,6 +158,10 @@ def cli(
         min_depth,
         min_simplex_depth,
         min_duplex_depth,
+        method,
+        use_phreds,
+        output_phreds,
+        param,
     )
 
 
