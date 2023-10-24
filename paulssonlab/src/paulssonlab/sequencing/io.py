@@ -251,5 +251,5 @@ def format_fastx(seqs, phreds=None, names=None):
 
 def write_fastx(filename, seqs, phreds=None, names=None):
     with open(filename, "w") as f:
-        for s in format_fastx(filename, seqs, phreds=phreds, names=names):
+        for s in format_fastx(seqs, phreds=phreds, names=names):
             f.write(s)
