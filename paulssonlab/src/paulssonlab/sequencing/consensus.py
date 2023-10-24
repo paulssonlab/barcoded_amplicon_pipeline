@@ -57,6 +57,7 @@ def poa(
         aligner = pyabpoa.msa_aligner(**{**ABPOA_DEFAULTS, **kwargs})
         res = aligner.msa(
             seqs,
+            # TODO: need to implement phred input
             # weights=phreds,
             out_cons=num_consensus_seqs > 0,
             out_msa=return_msa,
