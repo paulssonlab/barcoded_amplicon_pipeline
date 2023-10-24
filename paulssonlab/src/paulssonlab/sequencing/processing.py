@@ -160,7 +160,7 @@ def compute_depth(df):
     )
 
 
-def group_by_path(df):
+def map_read_groups(df, func):
     return (
         df.select(
             pl.col(
@@ -170,14 +170,20 @@ def group_by_path(df):
                 "read_phred",
                 "reverse_complement",
                 "path",
-                "full_path",
+                "depth",
+                "simplex_depth",
+                "duplex_depth",
             )
         )
         .group_by("path")
         .agg(
-            pl.col("name", "read_seq", "read_phred", "reverse_complement"),
-            pl.col("is_duplex").sum().alias("duplex_depth"),
-            pl.count().alias("depth"),
+            pl.map_groups(
+                pl.struct(
+                    pl.col("name", "read_seq", "read_phred", "reverse_complement")
+                ),
+                func,
+                returns_scalar=True,
+            ).alias("func_output"),
+            pl.col("path", "depth", "simplex_depth", "duplex_depth").first(),
         )
-        .with_columns((pl.col("depth") - pl.col("duplex_depth")).alias("simplex_depth"))
-    )
+    ).unnest("func_output")

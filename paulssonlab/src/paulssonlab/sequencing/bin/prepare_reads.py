@@ -16,6 +16,7 @@ from paulssonlab.sequencing.gfa import (
     gfa_to_dag,
 )
 from paulssonlab.sequencing.processing import identify_usable_reads, normalize_path
+from paulssonlab.sequencing.util import detect_format
 
 
 def prepare_reads(
@@ -29,13 +30,7 @@ def prepare_reads(
     exclude_prefix,
     keep_partial_paths,
 ):
-    if format is None:
-        if input_filename.endswith(".arrow"):
-            format = "arrow"
-        elif input_filename.endswith(".parquet"):
-            format = "parquet"
-        else:
-            raise ValueError(f"unknown file extension: {input_filename}")
+    format = detect_format(format, input_filename, ["arrow", "parquet"])
     gfa = gfapy.Gfa.from_file(gfa_filename)
     gfa = filter_gfa(gfa, include, include_prefix, exclude, exclude_prefix)
     graph = gfa_to_dag(gfa)

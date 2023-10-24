@@ -10,6 +10,7 @@ import pyarrow.parquet as pq
 
 sys.path.append(str(Path(__file__).parents[3]))
 from paulssonlab.sequencing.io import iter_bam_and_gaf
+from paulssonlab.sequencing.util import detect_format
 
 
 # TODO: obsolete when dorado 0.4.1 is released
@@ -39,22 +40,10 @@ def join_reads_and_gaf(
     output_format,
     include_unaligned,
 ):
-    if input_format is None:
-        if reads_filename.endswith(".bam"):
-            input_format = "bam"
-        elif reads_filename.endswith(".arrow"):
-            input_format = "arrow"
-        elif reads_filename.endswith(".parquet"):
-            input_format = "parquet"
-        else:
-            raise ValueError(f"unknown file extension: {input_filename}")
-    if output_format is None:
-        if output_filename.endswith(".arrow"):
-            format = "arrow"
-        elif output_filename.endswith(".parquet"):
-            format = "parquet"
-        else:
-            raise ValueError(f"unknown file extension: {output_filename}")
+    input_format = detect_format(
+        input_format, input_filename, ["bam", "arrow", "parquet"]
+    )
+    output_format = detect_format(output_format, output_filename, ["arrow", "parquet"])
     if input_format == "bam":
         batches = iter_bam_and_gaf(
             reads_filename, gaf_filename, include_unaligned=include_unaligned

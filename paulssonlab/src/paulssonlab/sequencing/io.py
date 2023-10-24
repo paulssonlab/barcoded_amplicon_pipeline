@@ -220,3 +220,28 @@ def iter_bam_and_gaf(
 
 def read_bam_and_gaf(bam_filename, gaf_filename, **kwargs):
     return pa.Table.from_batches(iter_bam_and_gaf(bam_filename, gaf_filename, **kwargs))
+
+
+def write_fastx(filename, seqs, phreds=None, names=None):
+    if phreds is None:
+        format = "fasta"
+        phreds = it.repeat(None)
+    else:
+        format = "fastq"
+    if names is None:
+        names = it.repeat(None)
+    with open(filename, "w") as f:
+        for idx, (name, seq, phred) in enumerate(zip(names, seqs, phreds)):
+            if name is None:
+                name = f"seq_{idx}"
+            if phred is None:
+                letter_annotations = None
+            else:
+                letter_annotations = dict(phred_quality=phred)
+            record = SeqRecord(
+                Seq(seq),
+                id=name,
+                description="",
+                letter_annotations=letter_annotations,
+            )
+            f.write(record.format(format))

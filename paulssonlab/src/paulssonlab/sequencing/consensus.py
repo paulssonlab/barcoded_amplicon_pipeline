@@ -21,10 +21,18 @@ GAP_CHAR = ord("-")
 SPACE_CHAR = ord(" ")
 
 # SEE: https://github.com/yangao07/abPOA/tree/main/python
-ABPOA_DEFAULTS = {"aln_mode": "g"}
+ABPOA_DEFAULTS = {"aln_mode": "l"}
 # SEE: https://github.com/rvaser/spoa
 # AND https://github.com/nanoporetech/pyspoa/blob/master/pyspoa.cpp
-SPOA_DEFAULTS = {}
+SPOA_DEFAULTS = {"algorithm": 0}
+
+
+# FROM: https://github.com/yangao07/abPOA/blob/c6c9dacf92414cd1a358cbd1d28b6f2ca37b30ed/src/abpoa_output.c#L270
+def abpoa_coverage_to_phred(coverage, num_seqs):
+    coverage = np.asarray(coverage)
+    x = 13.8 * (1.25 * coverage / num_seqs - 0.25)
+    p = 1 - 1.0 / (1.0 + np.exp(-x))
+    return (-10 * np.log10(p) + 0.499).astype(np.uint8)
 
 
 def poa(
@@ -56,8 +64,11 @@ def poa(
             min_freq=min_frequency,
         )
         consensus_seqs = res.cons_seq
+        num_seqs = len(seqs)
         if return_phreds:
-            consensus_phreds = [abpoa_coverage_to_phred(cov) for cov in res.cov_seq]
+            consensus_phreds = [
+                abpoa_coverage_to_phred(cov, num_seqs) for cov in res.cons_cov
+            ]
         msa_seqs = res.msa_seq
     elif method == "spoa":
         if num_consensus_seqs > 1:
@@ -125,18 +136,6 @@ def _get_consensus(
         rc,
         phreds=phreds,
     )
-    # print(prepared_reads)
-    # seqs = ["aaaaaaaatt", "ttttttttg", "aaaaaaagtt", "aaaaaaaaaatt"]
-    # poa_result = poa(
-    #     seqs,
-    #     # phreds=prepared_reads.get("phreds"),
-    #     num_consensus_seqs=1,
-    #     return_msa=False,
-    #     return_phreds=return_phreds,
-    #     # method="spoa",
-    #     **kwargs,
-    # )
-    # return None
     poa_result = poa(
         prepared_reads["seqs"],
         phreds=prepared_reads.get("phreds"),
@@ -182,13 +181,15 @@ def get_consensus(df, use_phreds=True, return_phreds=True, return_name=True, **k
 def get_consensus_group_by(
     df, use_phreds=True, return_phreds=True, return_name=True, **kwargs
 ):
-    return get_consensus(
+    res = get_consensus(
         df[0],
         use_phreds=use_phreds,
         return_phreds=return_phreds,
         return_name=return_name,
         **kwargs,
     )
+    # TODO: until polars accepts pyarrow/numpy arrays in pl.map_groups()
+    return {k: list(v) if isinstance(v, np.ndarray) else v for k, v in res.items()}
 
 
 # SEE: https://numba.discourse.group/t/feature-request-about-supporting-arrow-in-numba/1668/2
@@ -240,20 +241,6 @@ def align_phreds(seqs, phreds, gap_quality_method="mean"):
                 last_nongap_phred = base_phred
                 aligned_phred[base_idx] = base_phred
     return aligned_phreds
-
-
-# def phred_chars_to_ints():
-#     pass
-
-
-# def phred_ints_to_chars():
-#     pass
-
-
-def str_to_chars():
-    msa_seqs = np.array(
-        [np.frombuffer(seq.encode(), dtype=np.uint8) for seq in msa_seqs]
-    )
 
 
 def chars_to_str(ary, gaps=False):
