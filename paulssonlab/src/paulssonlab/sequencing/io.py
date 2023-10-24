@@ -1,9 +1,12 @@
+import itertools as it
 import re
 
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pysam
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 from pyarrow import csv
 
 # SEE: http://samtools.github.io/hts-specs/SAMv1.pdf
@@ -222,7 +225,7 @@ def read_bam_and_gaf(bam_filename, gaf_filename, **kwargs):
     return pa.Table.from_batches(iter_bam_and_gaf(bam_filename, gaf_filename, **kwargs))
 
 
-def write_fastx(filename, seqs, phreds=None, names=None):
+def format_fastx(seqs, phreds=None, names=None):
     if phreds is None:
         format = "fasta"
         phreds = it.repeat(None)
@@ -230,18 +233,23 @@ def write_fastx(filename, seqs, phreds=None, names=None):
         format = "fastq"
     if names is None:
         names = it.repeat(None)
+    for idx, (name, seq, phred) in enumerate(zip(names, seqs, phreds)):
+        if name is None:
+            name = f"seq_{idx}"
+        if phred is None:
+            letter_annotations = None
+        else:
+            letter_annotations = dict(phred_quality=phred)
+        record = SeqRecord(
+            Seq(seq),
+            id=name,
+            description="",
+            letter_annotations=letter_annotations,
+        )
+        yield record.format(format)
+
+
+def write_fastx(filename, seqs, phreds=None, names=None):
     with open(filename, "w") as f:
-        for idx, (name, seq, phred) in enumerate(zip(names, seqs, phreds)):
-            if name is None:
-                name = f"seq_{idx}"
-            if phred is None:
-                letter_annotations = None
-            else:
-                letter_annotations = dict(phred_quality=phred)
-            record = SeqRecord(
-                Seq(seq),
-                id=name,
-                description="",
-                letter_annotations=letter_annotations,
-            )
-            f.write(record.format(format))
+        for s in format_fastx(filename, seqs, phreds=phreds, names=names):
+            f.write(s)
