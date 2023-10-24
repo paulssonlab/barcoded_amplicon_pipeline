@@ -1,3 +1,5 @@
+import hashlib
+
 import awkward as ak
 import numba
 import numpy as np
@@ -19,10 +21,66 @@ GAP_CHAR = ord("-")
 SPACE_CHAR = ord(" ")
 
 # SEE: https://github.com/yangao07/abPOA/tree/main/python
-ABPOA_DEFAULTS = {"aln_mode": "l"}
+ABPOA_DEFAULTS = {"aln_mode": "g"}
 # SEE: https://github.com/rvaser/spoa
 # AND https://github.com/nanoporetech/pyspoa/blob/master/pyspoa.cpp
 SPOA_DEFAULTS = {}
+
+
+def poa(
+    seqs,
+    phreds=None,
+    method="abpoa",
+    num_consensus_seqs=1,
+    return_msa=False,
+    return_phreds=False,
+    min_frequency=0.25,
+    sort=True,
+    **kwargs,
+):
+    if sort:
+        # sort reads by length, see https://github.com/yangao07/abPOA/issues/48
+        # this is what medaka does for abpoa
+        sort_idxs = sorted(range(len(seqs)), key=lambda idx: len(seqs[idx]))
+        seqs = [seqs[idx] for idx in sort_idxs]
+        if phreds is not None:
+            phreds = list(phreds[sort_idxs])
+    if method == "abpoa":
+        aligner = pyabpoa.msa_aligner(**{**ABPOA_DEFAULTS, **kwargs})
+        res = aligner.msa(
+            seqs,
+            # weights=phreds,
+            out_cons=num_consensus_seqs > 0,
+            out_msa=return_msa,
+            max_n_cons=num_consensus_seqs or 0,
+            min_freq=min_frequency,
+        )
+        consensus_seqs = res.cons_seq
+        if return_phreds:
+            consensus_phreds = [abpoa_coverage_to_phred(cov) for cov in res.cov_seq]
+        msa_seqs = res.msa_seq
+    elif method == "spoa":
+        if num_consensus_seqs > 1:
+            raise ValueError("spoa can only output 1 consensus sequence")
+        if phreds is not None:
+            # TODO: would be easy to implement
+            raise ValueError(
+                "spoa does support weighting by phred scores but that is not currently implemented by pyspoa"
+            )
+        if return_phreds:
+            raise ValueError("spoa does not support outputting consensus phred scores")
+        consensus_seq, msa_seqs = spoa.poa(
+            list(seqs), genmsa=return_msa, **{**SPOA_DEFAULTS, **kwargs}
+        )
+        consensus_seqs = [consensus_seq]
+    else:
+        raise ValueError(f"method must be one of: abpoa, spoa")
+    res = dict(consensus_seqs=consensus_seqs)
+    if return_phreds:
+        res["consensus_phreds"] = consensus_phreds
+    if return_msa:
+        res["msa_seqs"] = msa_seqs
+    return res
 
 
 def prepare_reads(seqs, rcs, phreds=None):
@@ -33,6 +91,7 @@ def prepare_reads(seqs, rcs, phreds=None):
     seqs_oriented = [
         reverse_complement(seq) if rc else seq for seq, rc in zip(seqs, rcs)
     ]
+    res = dict(seqs=seqs_oriented)
     if phreds is not None:
         phreds_oriented = ak.from_arrow(
             pa.array(
@@ -42,26 +101,97 @@ def prepare_reads(seqs, rcs, phreds=None):
                 ]
             )
         )
-        return seqs_oriented, phreds_oriented
-    else:
-        return seqs_oriented
+        res["phreds"] = phreds_oriented
+    return res
 
 
-def msa(seqs, method="abpoa", **kwargs):
-    if method == "abpoa":
-        aligner = pyabpoa.msa_aligner(**{**ABPOA_DEFAULTS, **kwargs})
-        res = aligner.msa(seqs, out_cons=False, out_msa=True)
-        msa_seqs = res.msa_seq
-    elif method == "spoa":
-        _, msa_seqs = spoa.poa(seqs, **{**SPOA_DEFAULTS, **kwargs})
-    else:
-        raise ValueError(f"method must be one of: abpoa, spoa")
-    msa_seqs = np.array(
-        [np.frombuffer(seq.encode(), dtype=np.uint8) for seq in msa_seqs]
+def _names_to_hash(names, algorithm="sha256"):
+    h = hashlib.new(algorithm)
+    for name in names:
+        h.update(name.encode())
+    return h.hexdigest()
+
+
+def _get_consensus(
+    seqs,
+    rc,
+    phreds=None,
+    names=None,
+    return_phreds=True,
+    **kwargs,
+):
+    prepared_reads = prepare_reads(
+        seqs,
+        rc,
+        phreds=phreds,
     )
-    return msa_seqs
+    # print(prepared_reads)
+    # seqs = ["aaaaaaaatt", "ttttttttg", "aaaaaaagtt", "aaaaaaaaaatt"]
+    # poa_result = poa(
+    #     seqs,
+    #     # phreds=prepared_reads.get("phreds"),
+    #     num_consensus_seqs=1,
+    #     return_msa=False,
+    #     return_phreds=return_phreds,
+    #     # method="spoa",
+    #     **kwargs,
+    # )
+    # return None
+    poa_result = poa(
+        prepared_reads["seqs"],
+        phreds=prepared_reads.get("phreds"),
+        num_consensus_seqs=1,
+        return_msa=False,
+        return_phreds=return_phreds,
+        **kwargs,
+    )
+    consensus_seqs = poa_result["consensus_seqs"]
+    if len(consensus_seqs) != 1:
+        raise ValueError(
+            f"expecting one consensus sequence, POA returned {len(consensus_seqs)}"
+        )
+    res = dict(consensus_seq=consensus_seqs[0])
+    if return_phreds:
+        res["consensus_phred"] = poa_result["consensus_phreds"][0]
+    if names is not None:
+        res["name"] = f"consensus_{_names_to_hash(names)}"
+    return res
 
 
+def get_consensus(df, use_phreds=True, return_phreds=True, return_name=True, **kwargs):
+    seqs = df.struct.field("read_seq").to_list()
+    rc = df.struct.field("reverse_complement").to_arrow()
+    if use_phreds:
+        phreds = df.struct.field("read_phred").to_arrow()
+    else:
+        phreds = None
+    if return_name:
+        names = df.struct.field("name").to_list()
+    else:
+        names = None
+    return _get_consensus(
+        seqs,
+        rc,
+        phreds=phreds,
+        names=names,
+        return_phreds=return_phreds,
+        **kwargs,
+    )
+
+
+def get_consensus_group_by(
+    df, use_phreds=True, return_phreds=True, return_name=True, **kwargs
+):
+    return get_consensus(
+        df[0],
+        use_phreds=use_phreds,
+        return_phreds=return_phreds,
+        return_name=return_name,
+        **kwargs,
+    )
+
+
+# SEE: https://numba.discourse.group/t/feature-request-about-supporting-arrow-in-numba/1668/2
 @numba.njit(nogil=True)
 def align_phreds(seqs, phreds, gap_quality_method="mean"):
     num_seqs = len(seqs)
@@ -112,81 +242,18 @@ def align_phreds(seqs, phreds, gap_quality_method="mean"):
     return aligned_phreds
 
 
-# SEE: https://numba.discourse.group/t/feature-request-about-supporting-arrow-in-numba/1668/2
-@numba.njit(nogil=True)
-def phred_weighted_consensus(seqs, phreds, gap_quality_method="mean"):
-    num_seqs = len(seqs)
-    if not num_seqs:
-        return None, None, None, None
-    msa_length = len(seqs[0])
-    aligned_phred = np.empty(msa_length, dtype=np.int32)
-    votes = [
-        numba.typed.Dict.empty(key_type=numba.types.uint8, value_type=numba.types.int32)
-        for _ in range(msa_length)
-    ]
-    for seq_idx in range(num_seqs):
-        last_nongap_phred = -1
-        aligned_seq = seqs[seq_idx]
-        aligned_phred[:] = -1
-        unaligned_phred = phreds[seq_idx]
-        # necessary to avoid a NumbaTypeSafetyWarning arising from base_idx - offset
-        offset = numba.types.int64(0)
-        for base_idx in range(msa_length):
-            base = aligned_seq[base_idx]
-            if base == GAP_CHAR:
-                offset += 1
-                if last_nongap_phred != -1:
-                    aligned_phred[base_idx] = last_nongap_phred
-            else:
-                phred = unaligned_phred[base_idx - offset]
-                aligned_phred[base_idx] = phred
-                last_nongap_phred = phred
-        # let last_nongap_phred carry over
-        # numba doesn't support reversed(range(msa_length))
-        for base_idx in range(msa_length - 1, -1, -1):
-            base = aligned_seq[base_idx]
-            if base == GAP_CHAR:
-                offset -= 1
-                if last_nongap_phred != -1:
-                    existing_aligned_phred = aligned_phred[base_idx]
-                    if existing_aligned_phred == -1:
-                        # not necessary, since we don't use aligned_phred
-                        # aligned_phred[base_idx] = last_nongap_phred
-                        base_phred = last_nongap_phred
-                    else:
-                        if gap_quality_method == "min":
-                            base_phred = min(last_nongap_phred, existing_aligned_phred)
-                        elif gap_quality_method == "mean":
-                            base_phred = (
-                                last_nongap_phred + existing_aligned_phred
-                            ) // 2
-                        # not necessary, since we don't use aligned_phred
-                        # aligned_phred[base_idx] = base_phred
-            else:
-                base_phred = unaligned_phred[base_idx - offset]
-                last_nongap_phred = base_phred
-                # not necessary, since we don't use aligned_phred
-                # aligned_phred[base_idx] = base_phred
-            votes[base_idx][base] = votes[base_idx].get(base, 0) + base_phred
-    consensus = np.empty(msa_length, dtype=np.uint8)
-    nonconsensus = np.full(msa_length, SPACE_CHAR, dtype=np.uint8)
-    consensus_phred = np.empty(msa_length, dtype=np.int32)
-    nonconsensus_phred = np.zeros(msa_length, dtype=np.int32)
-    for base_idx in range(msa_length):
-        sorted_votes = sorted(
-            [(v, k) for k, v in votes[base_idx].items()], reverse=True
-        )
-        consensus[base_idx] = sorted_votes[0][1]
-        consensus_phred[base_idx] = sorted_votes[0][0]
-        if len(sorted_votes) >= 2:
-            nonconsensus[base_idx] = sorted_votes[1][1]
-            # TODO: numba doesn't support sum
-            # nonconsensus_phred[base_idx] = sum(v[0] for v in sorted_votes[1:])
-            p = 0
-            for v in sorted_votes[1:]:
-                p += v[0]
-            nonconsensus_phred[base_idx] = p
-    return consensus, consensus_phred, nonconsensus, nonconsensus_phred
+# def phred_chars_to_ints():
+#     pass
+
+
+# def phred_ints_to_chars():
+#     pass
+
+
+def str_to_chars():
+    msa_seqs = np.array(
+        [np.frombuffer(seq.encode(), dtype=np.uint8) for seq in msa_seqs]
+    )
 
 
 def chars_to_str(ary, gaps=False):

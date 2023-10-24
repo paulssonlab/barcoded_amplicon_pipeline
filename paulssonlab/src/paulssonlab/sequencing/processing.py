@@ -151,6 +151,15 @@ def identify_usable_reads(df):
     return df_usable
 
 
+def compute_depth(df):
+    return df.with_columns(
+        pl.col("is_duplex").sum().over("path").alias("duplex_depth"),
+        pl.count().over("path").alias("depth"),
+    ).with_columns(
+        (pl.col("depth") - pl.col("duplex_depth")).alias("simplex_depth"),
+    )
+
+
 def group_by_path(df):
     return (
         df.select(
