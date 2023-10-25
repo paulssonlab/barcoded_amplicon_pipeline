@@ -127,8 +127,8 @@ def _parse_params(ctx, param, value):
 @click.option("--min-simplex-depth", type=int)
 @click.option("--min-duplex-depth", type=int)
 @click.option("--method", type=click.Choice(["abpoa", "spoa"]), default="abpoa")
-@click.option("--use-phreds/--no-use-phreds", default=False)  # TODO
-@click.option("--output-phreds/--no-output-phreds", default=True)  # TODO
+@click.option("--phred-input/--no-phred-input", default=False)  # TODO
+@click.option("--phred-output/--no-phred-output", default=True)  # TODO
 @click.option("-p", "--param", type=(str, str), multiple=True, callback=_parse_params)
 @click.argument("input", type=str, nargs=-1)
 def cli(
@@ -143,8 +143,8 @@ def cli(
     min_simplex_depth,
     min_duplex_depth,
     method,
-    use_phreds,
-    output_phreds,
+    phred_input,
+    phred_output,
     param,
 ):
     compute_consensus_seqs(
@@ -159,8 +159,8 @@ def cli(
         min_simplex_depth,
         min_duplex_depth,
         method,
-        use_phreds,
-        output_phreds,
+        phred_input,
+        phred_output,
         param,
     )
 
