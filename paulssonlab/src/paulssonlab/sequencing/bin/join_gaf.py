@@ -9,31 +9,32 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 sys.path.append(str(Path(__file__).parents[3]))
-from paulssonlab.sequencing.io import iter_bam_and_gaf
+from paulssonlab.sequencing.io import iter_bam_and_gaf, read_gaf
 from paulssonlab.sequencing.util import detect_format
 
 
 # TODO: obsolete when dorado 0.4.1 is released
 def fix_dx(table):
-    name_col = table.column("name")
-    new_dx = pc.if_else(
-        pc.is_in(
-            name_col,
-            pc.list_flatten(
-                pc.split_pattern(
-                    name_col.filter(pc.match_substring(name_col, ";")), ";"
-                )
+    if "dx" in table.column_names:
+        name_col = table.column("name")
+        new_dx = pc.if_else(
+            pc.is_in(
+                name_col,
+                pc.list_flatten(
+                    pc.split_pattern(
+                        name_col.filter(pc.match_substring(name_col, ";")), ";"
+                    )
+                ),
             ),
-        ),
-        -1,
-        table.column("dx"),
-    )
-    table = table.set_column(table.column_names.index("dx"), "dx", new_dx)
+            -1,
+            table.column("dx"),
+        )
+        table = table.set_column(table.column_names.index("dx"), "dx", new_dx)
     return table
 
 
 def join_reads_and_gaf(
-    reads_filename,
+    input_filename,
     gaf_filename,
     output_filename,
     input_format,
@@ -41,35 +42,40 @@ def join_reads_and_gaf(
     include_unaligned,
 ):
     input_format = detect_format(
-        input_format, input_filename, ["bam", "arrow", "parquet"]
+        input_format,
+        input_filename[0],
+        ["bam", "arrow", "parquet"],
+        glob=True,
     )
     output_format = detect_format(output_format, output_filename, ["arrow", "parquet"])
     if input_format == "bam":
+        if len(input_filename) != 1:
+            raise ValueError("joining more than one bam file is unsupported")
         batches = iter_bam_and_gaf(
-            reads_filename, gaf_filename, include_unaligned=include_unaligned
+            input_filename[0], gaf_filename, include_unaligned=include_unaligned
         )
         table = pa.Table.from_batches(batches)
         # can't do this streaming because we need to unify dictionaries
         table = table.unify_dictionaries()
     else:
         if input_format == "arrow":
-            reads = pl.scan_ipc(input_filename)
+            reads = pl.concat([pl.scan_ipc(f) for f in input_filename])
         elif input_format == "parquet":
-            reads = pl.scan_parquet(input_filename)
-        gaf = pl.from_arrow(read_gaf(gaf_filename))
-        df = reads.join(gaf, on="name", how="left")
-        table = df.to_arrow()
+            reads = pl.concat([pl.scan_parquet(f) for f in input_filename])
+        gaf = pl.from_arrow(read_gaf(gaf_filename)).lazy()
+        df = reads.join(gaf, on="name", how="left", suffix="_consensus")
+        table = df.collect().to_arrow()
     table = fix_dx(table)  # TODO
-    if format == "arrow":
+    if output_format == "arrow":
         with pa.ipc.new_file(
             output_filename,
             table.schema,
         ) as writer:
             writer.write(table)
-    elif format == "parquet":
+    elif output_format == "parquet":
         pq.write_table(table, output_filename)
     else:
-        raise ValueError(f"unknown format: {format}")
+        raise ValueError(f"unknown format: {output_format}")
 
 
 @click.command()
@@ -84,12 +90,12 @@ def join_reads_and_gaf(
     type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
 @click.option("--include-unaligned/--no-include-unaligned", default=True)
-@click.argument("reads", type=click.Path(exists=True, dir_okay=False))
-@click.argument("gaf", type=click.Path(exists=True, dir_okay=False))
+@click.argument("input", type=click.Path(), nargs=-1)
+@click.argument("gaf", type=click.Path())
 @click.argument("output", type=click.Path())
-def cli(reads, gaf, output, input_format, output_format, include_unaligned):
+def cli(input, gaf, output, input_format, output_format, include_unaligned):
     join_reads_and_gaf(
-        reads,
+        input,
         gaf,
         output,
         input_format,
