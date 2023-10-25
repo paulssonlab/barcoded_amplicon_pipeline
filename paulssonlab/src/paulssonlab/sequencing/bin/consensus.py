@@ -29,6 +29,8 @@ def compute_consensus_seqs(
     output_phreds=None,
     consensus_kwargs={},
 ):
+    if not input_filename:
+        return  # no op if given no input
     if fastq_filename and not output_phreds:
         raise ValueError("cannot output fastq without --output-phreds")
     # detect format based on first of potentially many filenames/glob patterns
@@ -87,11 +89,14 @@ def compute_consensus_seqs(
 
 
 def _parse_group(ctx, param, value):
-    try:
-        assert value.count("/") == 1
-        return tuple(int(num.strip()) for num in value.split("/"))
-    except:
-        raise click.BadParameter("expecting --group <group_id>/<num_groups>")
+    if value:
+        try:
+            assert value.count("/") == 1
+            return tuple(int(num.strip()) for num in value.split("/"))
+        except:
+            raise click.BadParameter("expecting --group <group_id>/<num_groups>")
+    else:
+        return None
 
 
 def _parse_params(ctx, param, value):

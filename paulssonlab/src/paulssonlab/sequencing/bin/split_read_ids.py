@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import sys
 from pathlib import Path
 from urllib.parse import quote_plus
 
