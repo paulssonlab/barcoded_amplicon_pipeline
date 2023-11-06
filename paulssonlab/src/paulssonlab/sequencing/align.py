@@ -98,7 +98,7 @@ def encode_cigar(cigar):
 
 def decode_cigar(s):
     return [
-        (CigarOp(match[2]), int(match[1]))
+        (CigarOp[match[2]], int(match[1]))
         for match in re.finditer(r"(\d+)(M|I|D|N|S|H|P|=|X|B)", s)
     ]
 
