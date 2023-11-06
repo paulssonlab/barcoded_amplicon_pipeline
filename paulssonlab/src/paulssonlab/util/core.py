@@ -3,7 +3,15 @@ from functools import partial
 from itertools import zip_longest
 from numbers import Number
 
-from cytoolz import compose
+from cytoolz import compose, dissoc
+
+
+def extract_keys(d, keys):
+    return {k: d[k] for k in d.keys() & set(keys)}
+
+
+def pop_keys(d, keys):
+    return extract_keys(d, keys), dissoc(d, *keys)
 
 
 def any_none(*args):
