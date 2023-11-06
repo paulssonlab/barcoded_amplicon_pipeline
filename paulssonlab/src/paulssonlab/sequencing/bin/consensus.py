@@ -10,7 +10,7 @@ sys.path.append(str(Path(__file__).parents[3]))
 from paulssonlab.sequencing.consensus import get_consensus_group_by
 from paulssonlab.sequencing.io import write_fastx
 from paulssonlab.sequencing.processing import compute_depth, map_read_groups
-from paulssonlab.sequencing.util import detect_format
+from paulssonlab.sequencing.util import detect_format, parse_kv
 
 
 def compute_consensus_seqs(
@@ -99,20 +99,6 @@ def _parse_group(ctx, param, value):
         return None
 
 
-def _parse_params(ctx, param, value):
-    d = {}
-    for k, v in value:
-        try:
-            v = int(v)
-        except:
-            try:
-                v = float(v)
-            except:
-                pass
-        d[k] = v
-    return d
-
-
 @click.command()
 @click.option("--output", type=click.Path())
 @click.option("--fasta", type=click.Path())
@@ -134,7 +120,7 @@ def _parse_params(ctx, param, value):
 @click.option("--method", type=click.Choice(["abpoa", "spoa"]), default="abpoa")
 @click.option("--phred-input/--no-phred-input", default=False)  # TODO
 @click.option("--phred-output/--no-phred-output", default=True)  # TODO
-@click.option("-p", "--param", type=(str, str), multiple=True, callback=_parse_params)
+@click.option("-p", "--param", type=(str, str), multiple=True, callback=parse_kv)
 @click.argument("input", type=str, nargs=-1)
 def cli(
     input,

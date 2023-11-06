@@ -86,7 +86,7 @@ def poa(
         )
         consensus_seqs = [consensus_seq]
     else:
-        raise ValueError(f"method must be one of: abpoa, spoa")
+        raise ValueError(f"invalid method {method}")
     res = dict(consensus_seqs=consensus_seqs)
     if return_phreds:
         res["consensus_phreds"] = consensus_phreds

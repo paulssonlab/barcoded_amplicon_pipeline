@@ -16,5 +16,5 @@ def detect_format(format, filename, formats, glob=False):
                 format = f
                 break
         else:
-            raise ValueError(f"unknown file extension: {filename}")
+            raise ValueError(f"invalid file extension: {filename}")
     return format

@@ -35,10 +35,10 @@ def fix_dx(table):
 
 def join_reads_and_gaf(
     input_filename,
-    gaf_filename,
     output_filename,
     input_format,
     output_format,
+    gaf_filename,
     include_unaligned,
 ):
     input_format = detect_format(
@@ -75,10 +75,11 @@ def join_reads_and_gaf(
     elif output_format == "parquet":
         pq.write_table(table, output_filename)
     else:
-        raise ValueError(f"unknown format: {output_format}")
+        raise ValueError(f"invalid format: {output_format}")
 
 
 @click.command()
+@click.option("--gaf", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option(
     "-i",
     "--input-format",
@@ -90,16 +91,15 @@ def join_reads_and_gaf(
     type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
 @click.option("--include-unaligned/--no-include-unaligned", default=True)
-@click.argument("input", type=click.Path(), nargs=-1)
-@click.argument("gaf", type=click.Path())
+@click.argument("input", type=str, nargs=-1)
 @click.argument("output", type=click.Path())
-def cli(input, gaf, output, input_format, output_format, include_unaligned):
+def cli(input, output, input_format, output_format, gaf, include_unaligned):
     join_reads_and_gaf(
         input,
-        gaf,
         output,
         input_format,
         output_format,
+        gaf,
         include_unaligned,
     )
 
