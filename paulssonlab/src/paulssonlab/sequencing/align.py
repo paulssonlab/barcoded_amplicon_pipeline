@@ -1,4 +1,5 @@
-from enum import IntEnum
+import re
+from enum import Enum
 
 import polars as pl
 
@@ -26,8 +27,7 @@ PARASAIL_ALGORITHMS = "nw,sg,sg_qb,sg_qe,sg_qx,sg_db,sg_de,sg_dx,sg_qb_de,sg_qe_
 PARASAIL_VECTORIZATION_STRATEGIES = ["striped", "scan", "diag"]
 PARASAIL_SOLUTION_WIDTHS = ["8", "16", "32", "64", "sat"]
 
-# ends-free is semiglobal
-PYWFA_DEFAULTS = {"span": "ends-free"}
+PYWFA_DEFAULTS = {}
 PYWFA_CLASS_KWARGS = [
     "match",
     "gap_opening",
@@ -72,23 +72,35 @@ DEGENERATE_BASES = {
 # FROM: https://github.com/jeffdaily/parasail/blob/600fb26151ff19899ee39a214972dcf2b9b11ed7/src/cigar.c#L18
 # and
 # FROM: https://github.com/kcleal/pywfa
-class CigarOp(IntEnum):
-    M = 0
-    I = 1
-    D = 2
-    N = 3
-    S = 4
-    H = 5
-    P = 6
-    Eq = 7
-    X = 8
-    B = 9
+# for enum trickery, see https://www.notinventedhere.org/articles/python/how-to-use-strings-as-name-aliases-in-python-enums.html
+CigarOp = Enum(
+    "CigarOp",
+    [
+        ("M", 0),
+        ("I", 1),
+        ("D", 2),
+        ("N", 3),
+        ("S", 4),
+        ("H", 5),
+        ("P", 6),
+        ("=", 7),
+        ("X", 8),
+        ("B", 9),
+    ],
+)
+CigarOp.__repr__ = lambda self: self.name
+CigarOp.__format__ = lambda self, spec: self.__repr__()
 
-    def __repr__(self):
-        name = self.name
-        if name == "Eq":
-            name = "="
-        return name
+
+def encode_cigar(cigar):
+    return "".join(f"{length}{op}" for op, length in cigar)
+
+
+def decode_cigar(s):
+    return [
+        (CigarOp(match[2]), int(match[1]))
+        for match in re.finditer(r"(\d+)(M|I|D|N|S|H|P|=|X|B)", s)
+    ]
 
 
 def degenerate_parasail_matrix(
@@ -144,16 +156,13 @@ def pairwise_align(
     query,
     ref,
     method="parasail",
-    parasail_algorithm="sw",
+    parasail_algorithm="nw",
     parasail_vectorization_strategy="striped",
     parasail_solution_width="sat",
     parasail_case_sensitive=False,
     alphabet_aliases=None,
-    match=1,
-    mismatch=0,
     degenerate=False,
-    degenerate_match=None,
-    degenerate_mismatch=None,
+    cigar_as_string=True,
     upper=True,
     **kwargs,
 ):
@@ -188,7 +197,6 @@ def pairwise_align(
             substitution_matrix = parasail.matrix_create(
                 "ATCG", degenerate_kwargs["match"], degenerate_kwargs["mismatch"]
             )
-            alphabet_aliases = None
         res = parasail_align_func(
             query, ref, gap_opening, gap_extension, substitution_matrix
         )
@@ -199,7 +207,6 @@ def pairwise_align(
                 alphabet_aliases=alphabet_aliases,
             ).seq
         )
-        return score, cigar
     elif method == "pywfa":
         kwargs = {**PYWFA_DEFAULTS, **kwargs}
         class_kwargs, kwargs = pop_keys(kwargs, PYWFA_CLASS_KWARGS)
@@ -214,6 +221,8 @@ def pairwise_align(
         # SEE: https://github.com/smarco/WFA2-lib/issues/20
         score = wfa.score
         cigar = _decode_pywfa_cigar(wfa.cigartuples)
-        return score, cigar
     else:
         raise ValueError(f"invalid method {method}")
+    if cigar_as_string:
+        cigar = encode_cigar(cigar)
+    return score, cigar
