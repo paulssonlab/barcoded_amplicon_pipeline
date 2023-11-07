@@ -10,7 +10,8 @@ sys.path.append(str(Path(__file__).parents[3]))
 from paulssonlab.sequencing.consensus import get_consensus_group_by
 from paulssonlab.sequencing.io import write_fastx
 from paulssonlab.sequencing.processing import compute_depth, map_read_groups
-from paulssonlab.sequencing.util import detect_format, parse_kv
+from paulssonlab.sequencing.util import detect_format
+from paulssonlab.util.cli import parse_kv
 
 
 def compute_consensus_seqs(

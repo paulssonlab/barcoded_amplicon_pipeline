@@ -30,7 +30,7 @@ def prepare_reads(
     exclude_prefix,
     keep_partial_paths,
 ):
-    format = detect_format(format, input_filename, ["arrow", "parquet"])
+    format = detect_format(format, input_filename[0], ["arrow", "parquet"], glob=True)
     gfa = gfapy.Gfa.from_file(gfa_filename)
     gfa = filter_gfa(gfa, include, include_prefix, exclude, exclude_prefix)
     graph = gfa_to_dag(gfa)
@@ -43,9 +43,9 @@ def prepare_reads(
         endpoints = dag_endpoints(graph, wccs=wccs)
     with pl.StringCache():
         if format == "arrow":
-            df = pl.scan_ipc(input_filename)
+            df = pl.concat([pl.scan_ipc(f) for f in input_filename])
         elif format == "parquet":
-            df = pl.scan_parquet(input_filename)
+            df = pl.concat([pl.scan_parquet(f) for f in input_filename])
         df = normalize_path(df, forward_segments, endpoints=endpoints)
         # identify_usable_reads is much faster when working on in-memory data
         df = df.collect().lazy()
@@ -71,8 +71,8 @@ def prepare_reads(
     "--keep-partial-paths",
     help="Keep alignments with paths that do not span graph end-to-end",
 )
-@click.argument("gfa", type=click.Path(exists=True, dir_okay=False))
-@click.argument("input", type=click.Path(exists=True, dir_okay=False))
+@click.option("--gfa", type=click.Path(exists=True, dir_okay=False), required=True)
+@click.argument("input", type=click.Path(exists=True, dir_okay=False), nargs=-1)
 @click.argument("output", type=click.Path())
 def cli(
     gfa,
@@ -86,10 +86,10 @@ def cli(
     keep_partial_paths,
 ):
     prepare_reads(
-        gfa,
         input,
         output,
         format,
+        gfa,
         include,
         include_prefix,
         exclude,
