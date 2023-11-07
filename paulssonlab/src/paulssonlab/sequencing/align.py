@@ -1,5 +1,5 @@
 import re
-from enum import Enum
+from enum import IntEnum
 
 import polars as pl
 
@@ -73,7 +73,7 @@ DEGENERATE_BASES = {
 # and
 # FROM: https://github.com/kcleal/pywfa
 # for enum trickery, see https://www.notinventedhere.org/articles/python/how-to-use-strings-as-name-aliases-in-python-enums.html
-CigarOp = Enum(
+CigarOp = IntEnum(
     "CigarOp",
     [
         ("M", 0),
@@ -89,6 +89,7 @@ CigarOp = Enum(
     ],
 )
 CigarOp.__repr__ = lambda self: self.name
+CigarOp.__str__ = CigarOp.__repr__
 CigarOp.__format__ = lambda self, spec: self.__repr__()
 
 
