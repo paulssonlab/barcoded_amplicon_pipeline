@@ -1,6 +1,9 @@
+from functools import partial
+
 import polars as pl
 
-from paulssonlab.sequencing.gfa import gfa_endpoints
+from paulssonlab.sequencing.align import pairwise_align
+from paulssonlab.sequencing.gfa import assemble_seq_from_path, gfa_name_mapping
 
 
 def _reverse_segment(s):
@@ -187,3 +190,30 @@ def map_read_groups(df, func):
             pl.col("path", "depth", "simplex_depth", "duplex_depth").first(),
         )
     ).unnest("func_output")
+
+
+def _pairwise_align_row(row, name_to_seq=None, **kwargs):
+    path, seq = row
+    ref_seq = assemble_seq_from_path(name_to_seq, path)
+    score, cigar = pairwise_align(seq, ref_seq, **kwargs)
+    return score, cigar
+
+
+def pairwise_align_to_path(df, gfa, **kwargs):
+    name_to_seq = gfa_name_mapping(gfa)
+    return pl.concat(
+        (
+            df,
+            df.select(pl.col("path_consensus", "consensus_seq"))
+            .map_rows(
+                partial(_pairwise_align_row, name_to_seq=name_to_seq, **kwargs),
+                # TODO: waiting on https://github.com/pola-rs/polars/issues/12271
+                # return_dtype=pl.Struct(
+                #     dict(score_realign=pl.Int32, cg_realign=pl.Utf8)
+                # ),
+            )
+            .rename({"column_0": "score_realign", "column_1": "cg_realign"})
+            .with_columns(pl.col("score_realign").cast(pl.Int32)),
+        ),
+        how="horizontal",
+    )

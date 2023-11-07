@@ -4,6 +4,7 @@ from cytoolz import compose
 from gfapy import Gfa
 
 from paulssonlab.util.cli import split_delimited_list
+from paulssonlab.util.sequence import reverse_complement
 
 # SEE: https://stackoverflow.com/a/76464205
 filter_gfa_options = compose(
@@ -156,3 +157,21 @@ def filter_gfa(gfa, include=[], include_prefix=[], exclude=[], exclude_prefix=[]
         if not _exclude_gfa_line(line, segments_to_delete)
     ]
     return Gfa(lines)
+
+
+def gfa_name_mapping(gfa):
+    return {
+        f"<{name}"
+        if rc
+        else f">{name}": reverse_complement(seg.sequence)
+        if rc
+        else seg.sequence
+        for name, seg in gfa._records["S"].items()
+        for rc in (False, True)
+    }
+
+
+def assemble_seq_from_path(name_to_seq, path):
+    if isinstance(name_to_seq, Gfa):
+        name_to_seq = gfa_name_mapping(name_to_seq)
+    return "".join(name_to_seq[segment] for segment in path)
