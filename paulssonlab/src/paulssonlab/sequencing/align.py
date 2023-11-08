@@ -1,8 +1,4 @@
-import re
-from enum import IntEnum
-
-import polars as pl
-
+from paulssonlab.sequencing.cigar import encode_cigar
 from paulssonlab.util.core import pop_keys
 
 try:
@@ -67,41 +63,6 @@ DEGENERATE_BASES = {
     "V": "ACG",
     "N": "ACGT",
 }
-
-
-# FROM: https://github.com/jeffdaily/parasail/blob/600fb26151ff19899ee39a214972dcf2b9b11ed7/src/cigar.c#L18
-# and
-# FROM: https://github.com/kcleal/pywfa
-# for enum trickery, see https://www.notinventedhere.org/articles/python/how-to-use-strings-as-name-aliases-in-python-enums.html
-CigarOp = IntEnum(
-    "CigarOp",
-    [
-        ("M", 0),
-        ("I", 1),
-        ("D", 2),
-        ("N", 3),
-        ("S", 4),
-        ("H", 5),
-        ("P", 6),
-        ("=", 7),
-        ("X", 8),
-        ("B", 9),
-    ],
-)
-CigarOp.__repr__ = lambda self: self.name
-CigarOp.__str__ = CigarOp.__repr__
-CigarOp.__format__ = lambda self, spec: self.__repr__()
-
-
-def encode_cigar(cigar):
-    return "".join(f"{length}{op}" for op, length in cigar)
-
-
-def decode_cigar(s):
-    return [
-        (CigarOp[match[2]], int(match[1]))
-        for match in re.finditer(r"(\d+)(M|I|D|N|S|H|P|=|X|B)", s)
-    ]
 
 
 def degenerate_parasail_matrix(

@@ -205,6 +205,7 @@ def pairwise_align_to_path(df, gfa, **kwargs):
         (
             df,
             df.select(pl.col("path_consensus", "consensus_seq"))
+            # TODO: replace with map_batches (to support streaming, also avoids bug below)
             .map_rows(
                 partial(_pairwise_align_row, name_to_seq=name_to_seq, **kwargs),
                 # TODO: waiting on https://github.com/pola-rs/polars/issues/12271
