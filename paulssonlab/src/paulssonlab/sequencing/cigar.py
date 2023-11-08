@@ -84,15 +84,16 @@ def cut_cigar(
     segment_idx = 0
     cigar_idx = 0
     query_idx = 0
-    segment_length = segment_lengths[segment_idx]
-    segment_name = segment_names[segment_idx]
-    if "=" in segment_name:
-        eq_idx = segment_name.index("=")
-        segment_name, variant_name = segment_name[:eq_idx], _parse_variant(
-            segment_name[eq_idx + 1 :]
-        )
-    else:
-        variant_name = None
+    segment_length = None
+    # segment_length = segment_lengths[segment_idx]
+    # segment_name = segment_names[segment_idx]
+    # if "=" in segment_name:
+    #     eq_idx = segment_name.index("=")
+    #     segment_name, variant_name = segment_name[:eq_idx], _parse_variant(
+    #         segment_name[eq_idx + 1 :]
+    #     )
+    # else:
+    #     variant_name = None
     res = {}
     if separate_ends:
         res["upstream"] = {}
@@ -116,58 +117,42 @@ def cut_cigar(
             res["upstream"] = {}
         if return_cigars:
             pass
-    res[segment_name] = {}
-    if variant_name is not None:
-        res[segment_name]["variant"] = variant_name
-    if return_indices:
-        res[segment_name]["start"] = query_idx
-    if return_counts:
-        for col_name in OP_TO_COLUMN_NAME.values():
-            res[segment_name][col_name] = 0
-    if return_cigars:
-        res[segment_name]["cigar"] = []
+    # res[segment_name] = {}
+    # if variant_name is not None:
+    #     res[segment_name]["variant"] = variant_name
+    # if return_indices:
+    #     res[segment_name]["start"] = query_idx
+    # if return_counts:
+    #     for col_name in OP_TO_COLUMN_NAME.values():
+    #         res[segment_name][col_name] = 0
+    # if return_cigars:
+    #     res[segment_name]["cigar"] = []
     op = ops[cigar_idx]
     op_length = op_lengths[cigar_idx]
     while True:
-        advance = min(x for x in (op_length, segment_length) if x is not None)
-        print("!", segment_idx, advance)
-        # print(
-        #     f"op {op} {op_length} seg {segment_name} {segment_length} advance {advance}"
-        # )
-        if op in [CigarOp.I, CigarOp["="], CigarOp.X]:
-            query_idx += advance
-        op_length -= advance
-        if op in [CigarOp.D, CigarOp["="], CigarOp.X]:
-            segment_length -= advance
-        if return_counts:
-            col_name = OP_TO_COLUMN_NAME[op]
-            res[segment_name][col_name] += advance
-        if return_cigars:
-            res[segment_name]["cigar"].append((op, advance))
-        if return_variants:
-            pass
-        print("*", segment_length, op_length, f"{segment_idx}/{len(segment_lengths)}")
-        if segment_length == 0:
-            if return_indices:
-                res[segment_name]["end"] = query_idx
-                res[segment_name]["reverse_complement"] = segment_rc[segment_idx]
-            if return_sequences:
-                if sequence is not None:
-                    segment_seq = sequence[
-                        res[segment_name]["start"] : res[segment_name]["end"]
-                    ]
+        print("&", segment_length, op_length, f"{segment_idx}/{len(segment_lengths)}")
+        if segment_length == 0 or segment_length is None:
+            if segment_length is not None:
+                if return_indices:
+                    res[segment_name]["end"] = query_idx
+                    res[segment_name]["reverse_complement"] = segment_rc[segment_idx]
+                if return_sequences:
+                    if sequence is not None:
+                        segment_seq = sequence[
+                            res[segment_name]["start"] : res[segment_name]["end"]
+                        ]
+                        if segment_rc[segment_idx]:
+                            segment_seq = reverse_complement(segment_seq)
+                        res[segment_name]["seq"] = segment_seq
+                if return_cigars:
                     if segment_rc[segment_idx]:
-                        segment_seq = reverse_complement(segment_seq)
-                    res[segment_name]["seq"] = segment_seq
-            if return_cigars:
-                if segment_rc[segment_idx]:
-                    res[segment_name]["cigar"].reverse()
-                if cigar_as_string:
-                    print(">", segment_name)
-                    res[segment_name]["cigar"] = encode_cigar(
-                        res[segment_name]["cigar"]
-                    )
-            segment_idx += 1
+                        res[segment_name]["cigar"].reverse()
+                    if cigar_as_string:
+                        print(">", segment_name)
+                        res[segment_name]["cigar"] = encode_cigar(
+                            res[segment_name]["cigar"]
+                        )
+                segment_idx += 1
             if segment_idx == len(segment_lengths):
                 segment_length = None
             else:
@@ -191,6 +176,22 @@ def cut_cigar(
                         res[segment_name][col_name] = 0
                 if return_cigars:
                     res[segment_name]["cigar"] = []
+        advance = min(x for x in (op_length, segment_length) if x is not None)
+        print("!", segment_idx, advance)
+        # print(
+        #     f"op {op} {op_length} seg {segment_name} {segment_length} advance {advance}"
+        # )
+        if op in [CigarOp.I, CigarOp["="], CigarOp.X]:
+            query_idx += advance
+        op_length -= advance
+        if op in [CigarOp.D, CigarOp["="], CigarOp.X]:
+            segment_length -= advance
+        if return_counts:
+            col_name = OP_TO_COLUMN_NAME[op]
+            res[segment_name][col_name] += advance
+        if return_cigars:
+            res[segment_name]["cigar"].append((op, advance))
+        print("*", segment_length, op_length, f"{segment_idx}/{len(segment_lengths)}")
         if op_length == 0:
             cigar_idx += 1
             if cigar_idx == len(ops):
