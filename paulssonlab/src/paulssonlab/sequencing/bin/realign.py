@@ -20,6 +20,8 @@ def realign(
     output_format,
     path_column,
     sequence_column,
+    score_column,
+    cigar_column,
     align_kwargs={},
 ):
     if not input_filename:
@@ -37,14 +39,20 @@ def realign(
         df = pl.concat([pl.scan_ipc(f) for f in input_filename])
     elif input_format == "parquet":
         df = pl.concat([pl.scan_parquet(f) for f in input_filename])
-    df = df.collect()
     df = pairwise_align_to_path(
         df,
         gfa,
         path_column=path_column,
         sequence_column=sequence_column,
-        **align_kwargs,
+        score_column=score_column,
+        cigar_column=cigar_column,
+        align_kwargs=align_kwargs,
     )
+    # TODO: we can sink_ipc when a few polars bugs are fixed
+    # - https://github.com/pola-rs/polars/pull/6614 (this fix seems not to apply to map_batches)
+    # - https://github.com/pola-rs/polars/issues/11581
+    # - https://github.com/pola-rs/polars/issues/6407
+    df = df.collect()
     if output_format == "arrow":
         df.write_ipc(output_filename)
     elif output_format == "parquet":
@@ -68,17 +76,34 @@ def realign(
 @click.option("-p", "--param", type=(str, str), multiple=True, callback=parse_kv)
 @click.option("--path-col", default="consensus_path")
 @click.option("--seq-col", default="consensus_seq")
+@click.option("--score-col", default="realign_score")
+@click.option("--cigar-col", default="realign_cg")
 @click.argument("input", type=click.Path(exists=True, dir_okay=False), nargs=-1)
 @click.argument("output", type=click.Path())
-def cli(gfa, input, output, input_format, output_format, method, degenerate, param):
+def cli(
+    gfa,
+    input,
+    output,
+    input_format,
+    output_format,
+    method,
+    degenerate,
+    param,
+    path_col,
+    seq_col,
+    score_col,
+    cigar_col,
+):
     realign(
         gfa,
         input,
         output,
         input_format,
         output_format,
-        path_column,
-        sequence_column,
+        path_col,
+        seq_col,
+        score_col,
+        cigar_col,
         {"method": method, "degenerate": degenerate, **param},
     )
 

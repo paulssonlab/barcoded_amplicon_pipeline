@@ -1,4 +1,4 @@
-from paulssonlab.sequencing.cigar import encode_cigar
+from paulssonlab.sequencing.cigar import CigarOp, encode_cigar
 from paulssonlab.util.core import pop_keys
 
 try:

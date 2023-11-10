@@ -225,37 +225,67 @@ def map_read_groups(df, func):
                 ),
                 func,
                 returns_scalar=True,
-            ).alias("func_output"),
+            ).alias("_func_output"),
             pl.col("path", "depth", "simplex_depth", "duplex_depth").first(),
         )
-    ).unnest("func_output")
+    ).unnest("_func_output")
 
 
-def _pairwise_align_row(row, name_to_seq=None, **kwargs):
-    path, seq = row
-    ref_seq = assemble_seq_from_path(name_to_seq, path)
-    score, cigar = pairwise_align(seq, ref_seq, **kwargs)
-    return score, cigar
+def _pairwise_align_rows(
+    rows,
+    name_to_seq=None,
+    score_column=None,
+    cigar_column=None,
+    dtype=None,
+    align_kwargs={},
+):
+    paths = rows.struct.field("path")
+    seqs = rows.struct.field("seq")
+    return pl.Series(
+        [
+            dict(
+                zip(
+                    (score_column, cigar_column),
+                    pairwise_align(
+                        seqs[idx],
+                        assemble_seq_from_path(name_to_seq, paths[idx]),
+                        **align_kwargs,
+                    ),
+                )
+            )
+            for idx in range(len(rows))
+        ],
+        dtype=dtype,
+    )
 
 
 def pairwise_align_to_path(
-    df, gfa, path_column="consensus_path", sequence_column="consensus_seq", **kwargs
+    df,
+    gfa,
+    path_column="consensus_path",
+    sequence_column="consensus_seq",
+    score_column="realign_score",
+    cigar_column="realign_cg",
+    align_kwargs={},
 ):
     name_to_seq = gfa_name_mapping(gfa)
-    return pl.concat(
-        (
-            df,
-            df.select(pl.col(path_column, sequence_column))
-            # TODO: replace with map_batches (to support streaming, also avoids bug below)
-            .map_rows(
-                partial(_pairwise_align_row, name_to_seq=name_to_seq, **kwargs),
-                # TODO: waiting on https://github.com/pola-rs/polars/issues/12271
-                # return_dtype=pl.Struct(
-                #     dict(score_realign=pl.Int32, cg_realign=pl.Utf8)
-                # ),
-            )
-            .rename({"column_0": "realign_score", "column_1": "realign_cg"})
-            .with_columns(pl.col("realign_score").cast(pl.Int32)),
-        ),
-        how="horizontal",
-    )
+    dtype = pl.Struct({score_column: pl.Int32, cigar_column: pl.Utf8})
+    return df.select(
+        pl.all(),
+        pl.struct(
+            path=path_column,
+            seq=sequence_column,
+        )
+        .map_batches(
+            partial(
+                _pairwise_align_rows,
+                name_to_seq=name_to_seq,
+                score_column=score_column,
+                cigar_column=cigar_column,
+                dtype=dtype,
+                align_kwargs=align_kwargs,
+            ),
+            return_dtype=dtype,
+        )
+        .alias("_func_output"),
+    ).unnest("_func_output")
