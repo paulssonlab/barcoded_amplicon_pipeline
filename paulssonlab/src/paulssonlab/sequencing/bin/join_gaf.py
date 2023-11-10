@@ -10,6 +10,7 @@ import pyarrow.parquet as pq
 
 sys.path.append(str(Path(__file__).parents[3]))
 from paulssonlab.sequencing.io import iter_bam_and_gaf, read_gaf
+from paulssonlab.sequencing.processing import join_dfs
 from paulssonlab.sequencing.util import detect_format
 
 
@@ -40,6 +41,8 @@ def join_reads_and_gaf(
     output_format,
     gaf_filename,
     include_unaligned,
+    reads_prefix,
+    gaf_prefix,
 ):
     input_format = detect_format(
         input_format,
@@ -63,7 +66,14 @@ def join_reads_and_gaf(
         elif input_format == "parquet":
             reads = pl.concat([pl.scan_parquet(f) for f in input_filename])
         gaf = pl.from_arrow(read_gaf(gaf_filename)).lazy()
-        df = reads.join(gaf, on="name", how="left", suffix="_consensus")
+        df = join_dfs(
+            reads,
+            gaf,
+            on="name",
+            how="left",
+            left_prefix=reads_prefix,
+            right_prefix=gaf_prefix,
+        )
         table = df.collect().to_arrow()
     table = fix_dx(table)  # TODO
     if output_format == "arrow":
@@ -91,9 +101,20 @@ def join_reads_and_gaf(
     type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
 @click.option("--include-unaligned/--no-include-unaligned", default=True)
+@click.option("--reads-prefix", type=str)
+@click.option("--gaf-prefix", type=str)
 @click.argument("input", type=str, nargs=-1)
 @click.argument("output", type=click.Path())
-def cli(input, output, input_format, output_format, gaf, include_unaligned):
+def cli(
+    input,
+    output,
+    input_format,
+    output_format,
+    gaf,
+    include_unaligned,
+    reads_prefix,
+    gaf_prefix,
+):
     join_reads_and_gaf(
         input,
         output,
@@ -101,6 +122,8 @@ def cli(input, output, input_format, output_format, gaf, include_unaligned):
         output_format,
         gaf,
         include_unaligned,
+        reads_prefix,
+        gaf_prefix,
     )
 
 

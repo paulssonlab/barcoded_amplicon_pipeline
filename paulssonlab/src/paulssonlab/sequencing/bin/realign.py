@@ -18,6 +18,8 @@ def realign(
     output_filename,
     input_format,
     output_format,
+    path_column,
+    sequence_column,
     align_kwargs={},
 ):
     if not input_filename:
@@ -36,25 +38,17 @@ def realign(
     elif input_format == "parquet":
         df = pl.concat([pl.scan_parquet(f) for f in input_filename])
     df = df.collect()
-    df = pairwise_align_to_path(df, gfa, **align_kwargs)
+    df = pairwise_align_to_path(
+        df,
+        gfa,
+        path_column=path_column,
+        sequence_column=sequence_column,
+        **align_kwargs,
+    )
     if output_format == "arrow":
         df.write_ipc(output_filename)
     elif output_format == "parquet":
         df.write_parquet(output_filename)
-
-
-def _parse_params(ctx, param, value):
-    d = {}
-    for k, v in value:
-        try:
-            v = int(v)
-        except:
-            try:
-                v = float(v)
-            except:
-                pass
-        d[k] = v
-    return d
 
 
 @click.command()
@@ -72,6 +66,8 @@ def _parse_params(ctx, param, value):
 @click.option("--method", type=click.Choice(["parasail", "pywfa"]), default="parasail")
 @click.option("--degenerate/--no-degenerate", default=True)
 @click.option("-p", "--param", type=(str, str), multiple=True, callback=parse_kv)
+@click.option("--path-col", default="consensus_path")
+@click.option("--seq-col", default="consensus_seq")
 @click.argument("input", type=click.Path(exists=True, dir_okay=False), nargs=-1)
 @click.argument("output", type=click.Path())
 def cli(gfa, input, output, input_format, output_format, method, degenerate, param):
@@ -81,6 +77,8 @@ def cli(gfa, input, output, input_format, output_format, method, degenerate, par
         output,
         input_format,
         output_format,
+        path_column,
+        sequence_column,
         {"method": method, "degenerate": degenerate, **param},
     )
 

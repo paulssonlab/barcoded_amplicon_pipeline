@@ -6,6 +6,45 @@ from paulssonlab.sequencing.align import pairwise_align
 from paulssonlab.sequencing.gfa import assemble_seq_from_path, gfa_name_mapping
 
 
+# inspired by https://github.com/pola-rs/polars/issues/8205#issuecomment-1508532138
+def join_dfs(
+    left,
+    right,
+    on=None,
+    left_prefix=None,
+    left_suffix=None,
+    right_prefix=None,
+    right_suffix=None,
+    **kwargs,
+):
+    if on is None:
+        raise ValueError("must specify on")
+    if isinstance(on, str):
+        on = [on]
+    if left_prefix is None:
+        left_prefix = ""
+    if left_suffix is None:
+        left_suffix = ""
+    if right_prefix is None:
+        right_prefix = ""
+    if right_suffix is None:
+        right_suffix = ""
+    common_columns = set(left.columns) & set(right.columns) - set(on)
+    left_renamed = left.rename(
+        {
+            k: f"{left_prefix}{k}{left_suffix}" if k in common_columns else k
+            for k in left.columns
+        }
+    )
+    right_renamed = right.rename(
+        {
+            k: f"{right_prefix}{k}{right_suffix}" if k in common_columns else k
+            for k in right.columns
+        }
+    )
+    return left_renamed.join(right_renamed, on=on, **kwargs)
+
+
 def _reverse_segment(s):
     if s[0] == ">":
         return f"<{s[1:]}"
@@ -199,12 +238,14 @@ def _pairwise_align_row(row, name_to_seq=None, **kwargs):
     return score, cigar
 
 
-def pairwise_align_to_path(df, gfa, **kwargs):
+def pairwise_align_to_path(
+    df, gfa, path_column="consensus_path", sequence_column="consensus_seq", **kwargs
+):
     name_to_seq = gfa_name_mapping(gfa)
     return pl.concat(
         (
             df,
-            df.select(pl.col("path_consensus", "consensus_seq"))
+            df.select(pl.col(path_column, sequence_column))
             # TODO: replace with map_batches (to support streaming, also avoids bug below)
             .map_rows(
                 partial(_pairwise_align_row, name_to_seq=name_to_seq, **kwargs),
@@ -213,8 +254,8 @@ def pairwise_align_to_path(df, gfa, **kwargs):
                 #     dict(score_realign=pl.Int32, cg_realign=pl.Utf8)
                 # ),
             )
-            .rename({"column_0": "score_realign", "column_1": "cg_realign"})
-            .with_columns(pl.col("score_realign").cast(pl.Int32)),
+            .rename({"column_0": "realign_score", "column_1": "realign_cg"})
+            .with_columns(pl.col("realign_score").cast(pl.Int32)),
         ),
         how="horizontal",
     )
