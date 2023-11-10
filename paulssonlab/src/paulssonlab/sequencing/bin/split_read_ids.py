@@ -59,7 +59,7 @@ def write_read_ids(tsv_filename, output_dir, fields, chunks):
             file.close()
 
 
-@click.command()
+@click.command(context_settings={"show_default": True})
 @click.option(
     "-F",
     "--fields",
@@ -68,9 +68,7 @@ def write_read_ids(tsv_filename, output_dir, fields, chunks):
     show_default=True,
     callback=split_delimited_list,
 )
-@click.option(
-    "-c", "--chunks", type=click.IntRange(min=0), default=0, show_default=True
-)
+@click.option("-c", "--chunks", type=click.IntRange(min=0), default=0)
 @click.argument("input_tsv", type=click.Path(exists=True, dir_okay=False))
 @click.argument("output_dir", type=click.Path())
 def cli(input_tsv, output_dir, fields, chunks):

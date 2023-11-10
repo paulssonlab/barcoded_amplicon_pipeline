@@ -88,7 +88,7 @@ def join_reads_and_gaf(
         raise ValueError(f"invalid format: {output_format}")
 
 
-@click.command()
+@click.command(context_settings={"show_default": True})
 @click.option("--gaf", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option(
     "-i",

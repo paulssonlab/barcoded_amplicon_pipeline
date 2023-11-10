@@ -59,7 +59,7 @@ def prepare_reads(
             df.write_parquet(output_filename)
 
 
-@click.command()
+@click.command(context_settings={"show_default": True})
 @click.option(
     "-f",
     "--format",

@@ -259,13 +259,13 @@ def _pairwise_align_rows(
     )
 
 
-def pairwise_align_to_path(
+def pairwise_align_df_to_path(
     df,
     gfa,
-    path_column="consensus_path",
-    sequence_column="consensus_seq",
-    score_column="realign_score",
-    cigar_column="realign_cg",
+    path_column=None,
+    sequence_column=None,
+    score_column=None,
+    cigar_column=None,
     align_kwargs={},
 ):
     name_to_seq = gfa_name_mapping(gfa)

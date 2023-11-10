@@ -7,7 +7,7 @@ import polars as pl
 from gfapy import Gfa
 
 sys.path.append(str(Path(__file__).parents[3]))
-from paulssonlab.sequencing.processing import pairwise_align_to_path
+from paulssonlab.sequencing.processing import pairwise_align_df_to_path
 from paulssonlab.sequencing.util import detect_format
 from paulssonlab.util.cli import parse_kv
 
@@ -39,7 +39,7 @@ def realign(
         df = pl.concat([pl.scan_ipc(f) for f in input_filename])
     elif input_format == "parquet":
         df = pl.concat([pl.scan_parquet(f) for f in input_filename])
-    df = pairwise_align_to_path(
+    df = pairwise_align_df_to_path(
         df,
         gfa,
         path_column=path_column,
@@ -59,7 +59,7 @@ def realign(
         df.write_parquet(output_filename)
 
 
-@click.command()
+@click.command(context_settings={"show_default": True})
 @click.option("--gfa", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option(
     "-i",

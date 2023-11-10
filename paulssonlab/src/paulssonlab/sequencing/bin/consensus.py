@@ -100,7 +100,7 @@ def _parse_group(ctx, param, value):
         return None
 
 
-@click.command()
+@click.command(context_settings={"show_default": True})
 @click.option("--output", type=click.Path())
 @click.option("--fasta", type=click.Path())
 @click.option("--fastq", type=click.Path())
