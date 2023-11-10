@@ -69,6 +69,7 @@ def cut_cigar(
     path,
     name_to_seq,
     sequence=None,
+    phred=None,
     segments=None,
     variant_sep="=",
     key_sep="|",
@@ -113,6 +114,9 @@ def cut_cigar(
                         if segment_rc[segment_idx]:
                             segment_seq = reverse_complement(segment_seq)
                         res[segment_name]["seq"] = segment_seq
+                    if phred is not None:
+                        step = -1 if segment_rc[segment_idx] else 1
+                        res[segment_name]["phred"] = phred[start_idx:end_idx:step]
                     if return_cigars:
                         if segment_rc[segment_idx]:
                             res[segment_name]["cigar"].reverse()
@@ -170,211 +174,6 @@ def cut_cigar(
                 res[segment_name][OP_TO_COLUMN_NAME[op]] += advance
             if return_cigars:
                 _append_cigar(res[segment_name]["cigar"], (op, advance))
-    if key_sep is not None:
-        row = {}
-        for segment_name, segment_info in res.items():
-            for k, v in segment_info.items():
-                key = f"{segment_name}{key_sep}{k}"
-                if key in row:
-                    raise Exception(f"duplicate key: {key}")
-                row[key] = v
-        res = row
-    return res
-
-
-import numba
-
-
-def cut_cigar2(
-    cigar,
-    path,
-    name_to_seq,
-    sequence=None,
-    segments=None,
-    variant_sep="=",
-    key_sep="|",
-    return_indices=True,
-    return_counts=True,
-    return_cigars=True,
-    cigar_as_string=True,
-    return_variants=True,
-    separate_ends=True,
-):
-    if isinstance(name_to_seq, Gfa):
-        name_to_seq = sgfa.gfa_name_mapping(name_to_seq)
-    return _cut_cigar2(
-        cigar,
-        path,
-        name_to_seq,
-        sequence=sequence,
-        segments=segments,
-        variant_sep=variant_sep,
-        key_sep=key_sep,
-        return_indices=return_indices,
-        return_counts=return_counts,
-        return_cigars=return_cigars,
-        cigar_as_string=cigar_as_string,
-        return_variants=return_variants,
-        separate_ends=separate_ends,
-    )
-
-
-@numba.njit
-def encode_cigar2(cigar):
-    return "".join(f"{length}{op}" for op, length in cigar)
-
-
-@numba.njit
-def _parse_variant2(s):
-    try:
-        return int(s)
-    except:
-        return s
-
-
-from numba.core import types
-from numba.typed import Dict
-
-OP_TO_COLUMN_NAME2 = Dict.empty(
-    key_type=types.int64,
-    value_type=types.unicode_type,
-)
-
-# TODO: make elegant
-OP_TO_COLUMN_NAME2[CigarOp["="]] = "matches"
-OP_TO_COLUMN_NAME2[CigarOp.X] = "mismatches"
-OP_TO_COLUMN_NAME2[CigarOp.I] = "insertions"
-OP_TO_COLUMN_NAME2[CigarOp.D] = "deletions"
-
-
-@numba.njit
-def _append_cigar2(cigar, new):
-    if len(cigar) and cigar[-1][0] == new[0]:
-        old_length = cigar[-1][1]
-        cigar[-1] = (new[0], old_length + new[1])
-    else:
-        cigar.append(new)
-    return cigar
-
-
-@numba.njit
-def _cut_cigar2(
-    cigar,
-    path,
-    name_to_seq,
-    sequence=None,
-    segments=None,
-    variant_sep="=",
-    key_sep="|",
-    return_indices=True,
-    return_counts=True,
-    return_cigars=True,
-    cigar_as_string=True,
-    return_variants=True,
-    separate_ends=True,
-):
-    segment_lengths = [len(name_to_seq[name]) for name in path]
-    segment_names = [name[1:] for name in path]
-    segment_rc = [name[0] == "<" for name in path]
-    if separate_ends:
-        segment_names = ["upstream", *segment_names, "downstream"]
-        segment_lengths = [0, *segment_lengths, 0]
-        segment_rc = [False, *segment_rc, False]
-    if segments is None:
-        segments = set(segment_names)
-    else:
-        segments = set(segments)
-    segment_idx = 0
-    cigar_idx = 0
-    query_idx = 0
-    op = None
-    op_length = None
-    start_idx = None
-    segment_name = None
-    segment_length = None
-    res = {}
-    first = True
-    while True:
-        if (first or op != CigarOp.I) and (first or segment_length == 0):
-            if not first:
-                end_idx = query_idx
-                if segment_name in segments:
-                    if return_indices:
-                        res[segment_name]["start"] = start_idx
-                        res[segment_name]["end"] = end_idx
-                        res[segment_name]["reverse_complement"] = segment_rc[
-                            segment_idx
-                        ]
-                    if sequence is not None:
-                        segment_seq = sequence[start_idx:end_idx]
-                        if segment_rc[segment_idx]:
-                            segment_seq = reverse_complement(segment_seq)
-                        res[segment_name]["seq"] = segment_seq
-                    if return_cigars:
-                        if segment_rc[segment_idx]:
-                            res[segment_name]["cigar"].reverse()
-                        if cigar_as_string:
-                            res[segment_name]["cigar"] = encode_cigar2(
-                                res[segment_name]["cigar"]
-                            )
-                segment_idx += 1
-            if segment_idx == len(segment_lengths):
-                break
-            else:
-                segment_length = segment_lengths[segment_idx]
-                segment_name = segment_names[segment_idx]
-                if "=" in segment_name:
-                    eq_idx = segment_name.index("=")
-                    segment_name, variant_name = (
-                        segment_name[:eq_idx],
-                        _parse_variant2(segment_name[eq_idx + 1 :]),
-                    )
-                else:
-                    variant_name = None
-                start_idx = query_idx
-                if segment_name in segments:
-                    if segment_name in res:
-                        raise ValueError(f"duplicate segment: {segment_name}")
-                    res[segment_name] = {}
-                    if variant_name is not None:
-                        res[segment_name]["variant"] = variant_name
-                    if return_counts:
-                        for col_name in OP_TO_COLUMN_NAME2.values():
-                            res[segment_name][col_name] = 0
-                    if return_cigars:
-                        res[segment_name]["cigar"] = []
-        if first or op_length == 0:
-            if first:
-                first = False
-            else:
-                cigar_idx += 1
-            if cigar_idx == len(cigar):
-                op = None
-            else:
-                op = cigar[cigar_idx][0]
-                op_length = cigar[cigar_idx][1]
-        if op == CigarOp.I:
-            advance = op_length
-        else:
-            # advance = min(x for x in (op_length, segment_length) if x is not None)
-            if op_length is None and segment_length is None:
-                raise AssertionError
-            elif op_length is None:
-                advance = segment_length
-            elif segment_length is None:
-                advance = op_length
-            else:
-                advance = min(segment_length, op_length)
-        if op in [CigarOp.I, CigarOp["="], CigarOp.X]:
-            query_idx += advance
-        op_length -= advance
-        if op in [CigarOp.D, CigarOp["="], CigarOp.X]:
-            segment_length -= advance
-        if segment_name in segments and op is not None:
-            if return_counts:
-                res[segment_name][OP_TO_COLUMN_NAME2[op]] += advance
-            if return_cigars:
-                _append_cigar2(res[segment_name]["cigar"], (op, advance))
     if key_sep is not None:
         row = {}
         for segment_name, segment_info in res.items():
