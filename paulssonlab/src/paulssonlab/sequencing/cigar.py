@@ -80,6 +80,10 @@ def cut_cigar(
     return_variants=True,
     separate_ends=True,
 ):
+    if not cigar or not path:
+        # fail gracefully if given empty inputs
+        # the below code chokes if cigar or path is empty
+        return {}
     if isinstance(name_to_seq, Gfa):
         name_to_seq = sgfa.gfa_name_mapping(name_to_seq)
     segment_lengths = [len(name_to_seq[name]) for name in path]
@@ -89,10 +93,10 @@ def cut_cigar(
         segment_names = ["upstream", *segment_names, "downstream"]
         segment_lengths = [0, *segment_lengths, 0]
         segment_rc = [False, *segment_rc, False]
-    if segments is None:
-        segments = set(segment_names)
-    else:
+    if segments:
         segments = set(segments)
+    else:
+        segments = set(segment_names)
     segment_idx = 0
     cigar_idx = 0
     query_idx = 0

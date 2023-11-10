@@ -3,6 +3,7 @@ from functools import partial
 import polars as pl
 
 from paulssonlab.sequencing.align import pairwise_align
+from paulssonlab.sequencing.cigar import cut_cigar, decode_cigar
 from paulssonlab.sequencing.gfa import assemble_seq_from_path, gfa_name_mapping
 
 
@@ -289,3 +290,88 @@ def pairwise_align_df_to_path(
         )
         .alias("_func_output"),
     ).unnest("_func_output")
+
+
+def cut_cigar_exc(*args, **kwargs):
+    try:
+        return cut_cigar(*args, **kwargs)
+    except:
+        print("ARGS", args)
+        print("KWARGS", kwargs)
+        print()
+        print()
+        raise
+
+
+def _cut_cigar_rows(rows, name_to_seq=None, cut_cigar_kwargs={}):
+    paths = rows.struct.field("path")
+    cigars = rows.struct.field("cigar")
+    if "seq" in rows.struct.fields:
+        seqs = rows.struct.field("seq")
+    else:
+        seqs = None
+    if "phred" in rows.struct.fields:
+        phreds = rows.struct.field("phred")
+    else:
+        phreds = None
+    return pl.Series(
+        [
+            cut_cigar_exc(
+                decode_cigar(cigars[idx]),
+                paths[idx].to_list(),
+                name_to_seq,
+                sequence=seqs[idx] if seqs is not None else None,
+                phred=phreds[idx].to_numpy() if phreds is not None else None,
+                cigar_as_string=True,
+                **cut_cigar_kwargs,
+            )
+            for idx in range(len(rows))
+        ]
+    )
+
+
+def cut_cigar_df(
+    df,
+    gfa,
+    path_column=None,
+    cigar_column=None,
+    sequence_column=None,
+    phred_column=None,
+    keep_full=False,
+    cut_cigar_kwargs={},
+):
+    name_to_seq = gfa_name_mapping(gfa)
+    if path_column not in df.columns:
+        raise ValueError(f"missing column {path_column}")
+    if cigar_column not in df.columns:
+        raise ValueError(f"missing column {cigar_column}")
+    exclude_columns = []
+    struct = dict(path=path_column, cigar=cigar_column)
+    if sequence_column and sequence_column in df.columns:
+        exclude_columns.append(sequence_column)
+        struct["seq"] = sequence_column
+    if phred_column and phred_column in df.columns:
+        struct["phred"] = phred_column
+        exclude_columns.append(phred_column)
+    exclude_columns = []
+    if keep_full:
+        exclude_columns = []
+    return (
+        df.head(1000)
+        .select(
+            pl.all().exclude(exclude_columns),
+            pl.struct(**struct)
+            # TODO: dtype depends on cut_cigar_kwargs in complicated ways
+            # so we don't supply it
+            # polars docs says this is an error but still supported (??)
+            # in any case, it works for now
+            .map_batches(
+                partial(
+                    _cut_cigar_rows,
+                    name_to_seq=name_to_seq,
+                    cut_cigar_kwargs=cut_cigar_kwargs,
+                ),
+            ).alias("_func_output"),
+        )
+        .unnest("_func_output")
+    )
