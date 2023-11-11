@@ -61,20 +61,21 @@ def join_reads_and_gaf(
         # can't do this streaming because we need to unify dictionaries
         table = table.unify_dictionaries()
     else:
-        if input_format == "arrow":
-            reads = pl.concat([pl.scan_ipc(f) for f in input_filename])
-        elif input_format == "parquet":
-            reads = pl.concat([pl.scan_parquet(f) for f in input_filename])
-        gaf = pl.from_arrow(read_gaf(gaf_filename)).lazy()
-        df = join_dfs(
-            reads,
-            gaf,
-            on="name",
-            how="left",
-            left_prefix=reads_prefix,
-            right_prefix=gaf_prefix,
-        )
-        table = df.collect().to_arrow()
+        with pl.StringCache():
+            if input_format == "arrow":
+                reads = pl.concat([pl.scan_ipc(f) for f in input_filename])
+            elif input_format == "parquet":
+                reads = pl.concat([pl.scan_parquet(f) for f in input_filename])
+            gaf = pl.from_arrow(read_gaf(gaf_filename)).lazy()
+            df = join_dfs(
+                reads,
+                gaf,
+                on="name",
+                how="left",
+                left_prefix=reads_prefix,
+                right_prefix=gaf_prefix,
+            )
+            table = df.collect().to_arrow()
     table = fix_dx(table)  # TODO
     if output_format == "arrow":
         with pa.ipc.new_file(

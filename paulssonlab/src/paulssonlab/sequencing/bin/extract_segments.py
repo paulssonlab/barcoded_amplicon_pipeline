@@ -36,26 +36,27 @@ def extract_segments(
             output_format, output_filename, ["arrow", "parquet"]
         )
     gfa = Gfa.from_file(gfa_filename)
-    if input_format == "arrow":
-        df = pl.concat([pl.scan_ipc(f) for f in input_filename])
-    elif input_format == "parquet":
-        df = pl.concat([pl.scan_parquet(f) for f in input_filename])
-    df = cut_cigar_df(
-        df,
-        gfa,
-        path_column=path_column,
-        cigar_column=cigar_column,
-        sequence_column=sequence_column,
-        phred_column=phred_column,
-        keep_full=keep_full,
-        cut_cigar_kwargs=cut_cigar_kwargs,
-    )
-    # TODO: waiting on polars bugs before we can sink_ipc, see realign.py
-    df = df.collect()
-    if output_format == "arrow":
-        df.write_ipc(output_filename)
-    elif output_format == "parquet":
-        df.write_parquet(output_filename)
+    with pl.StringCache():
+        if input_format == "arrow":
+            df = pl.concat([pl.scan_ipc(f) for f in input_filename])
+        elif input_format == "parquet":
+            df = pl.concat([pl.scan_parquet(f) for f in input_filename])
+        df = cut_cigar_df(
+            df,
+            gfa,
+            path_column=path_column,
+            cigar_column=cigar_column,
+            sequence_column=sequence_column,
+            phred_column=phred_column,
+            keep_full=keep_full,
+            cut_cigar_kwargs=cut_cigar_kwargs,
+        )
+        # TODO: waiting on polars bugs before we can sink_ipc, see realign.py
+        df = df.collect()
+        if output_format == "arrow":
+            df.write_ipc(output_filename)
+        elif output_format == "parquet":
+            df.write_parquet(output_filename)
 
 
 @click.command(context_settings={"show_default": True})

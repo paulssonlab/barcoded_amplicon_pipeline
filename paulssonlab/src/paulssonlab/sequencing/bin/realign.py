@@ -35,28 +35,29 @@ def realign(
             output_format, output_filename, ["arrow", "parquet"]
         )
     gfa = Gfa.from_file(gfa_filename)
-    if input_format == "arrow":
-        df = pl.concat([pl.scan_ipc(f) for f in input_filename])
-    elif input_format == "parquet":
-        df = pl.concat([pl.scan_parquet(f) for f in input_filename])
-    df = pairwise_align_df_to_path(
-        df,
-        gfa,
-        path_column=path_column,
-        sequence_column=sequence_column,
-        score_column=score_column,
-        cigar_column=cigar_column,
-        align_kwargs=align_kwargs,
-    )
-    # TODO: we can sink_ipc when a few polars bugs are fixed
-    # - https://github.com/pola-rs/polars/pull/6614 (this fix seems not to apply to map_batches)
-    # - https://github.com/pola-rs/polars/issues/11581
-    # - https://github.com/pola-rs/polars/issues/6407
-    df = df.collect()
-    if output_format == "arrow":
-        df.write_ipc(output_filename)
-    elif output_format == "parquet":
-        df.write_parquet(output_filename)
+    with pl.StringCache():
+        if input_format == "arrow":
+            df = pl.concat([pl.scan_ipc(f) for f in input_filename])
+        elif input_format == "parquet":
+            df = pl.concat([pl.scan_parquet(f) for f in input_filename])
+        df = pairwise_align_df_to_path(
+            df,
+            gfa,
+            path_column=path_column,
+            sequence_column=sequence_column,
+            score_column=score_column,
+            cigar_column=cigar_column,
+            align_kwargs=align_kwargs,
+        )
+        # TODO: we can sink_ipc when a few polars bugs are fixed
+        # - https://github.com/pola-rs/polars/pull/6614 (this fix seems not to apply to map_batches)
+        # - https://github.com/pola-rs/polars/issues/11581
+        # - https://github.com/pola-rs/polars/issues/6407
+        df = df.collect()
+        if output_format == "arrow":
+            df.write_ipc(output_filename)
+        elif output_format == "parquet":
+            df.write_parquet(output_filename)
 
 
 @click.command(context_settings={"show_default": True})

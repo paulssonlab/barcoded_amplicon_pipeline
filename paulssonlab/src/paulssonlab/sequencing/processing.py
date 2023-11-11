@@ -292,17 +292,6 @@ def pairwise_align_df_to_path(
     ).unnest("_func_output")
 
 
-def cut_cigar_exc(*args, **kwargs):
-    try:
-        return cut_cigar(*args, **kwargs)
-    except:
-        print("ARGS", args)
-        print("KWARGS", kwargs)
-        print()
-        print()
-        raise
-
-
 def _cut_cigar_rows(rows, name_to_seq=None, cut_cigar_kwargs={}):
     paths = rows.struct.field("path")
     cigars = rows.struct.field("cigar")
@@ -316,7 +305,7 @@ def _cut_cigar_rows(rows, name_to_seq=None, cut_cigar_kwargs={}):
         phreds = None
     return pl.Series(
         [
-            cut_cigar_exc(
+            cut_cigar(
                 decode_cigar(cigars[idx]),
                 paths[idx].to_list(),
                 name_to_seq,
@@ -356,22 +345,18 @@ def cut_cigar_df(
     exclude_columns = []
     if keep_full:
         exclude_columns = []
-    return (
-        df.head(1000)
-        .select(
-            pl.all().exclude(exclude_columns),
-            pl.struct(**struct)
-            # TODO: dtype depends on cut_cigar_kwargs in complicated ways
-            # so we don't supply it
-            # polars docs says this is an error but still supported (??)
-            # in any case, it works for now
-            .map_batches(
-                partial(
-                    _cut_cigar_rows,
-                    name_to_seq=name_to_seq,
-                    cut_cigar_kwargs=cut_cigar_kwargs,
-                ),
-            ).alias("_func_output"),
-        )
-        .unnest("_func_output")
-    )
+    return df.select(
+        pl.all().exclude(exclude_columns),
+        pl.struct(**struct)
+        # TODO: dtype depends on cut_cigar_kwargs in complicated ways
+        # so we don't supply it
+        # polars docs says this is an error but still supported (??)
+        # in any case, it works for now
+        .map_batches(
+            partial(
+                _cut_cigar_rows,
+                name_to_seq=name_to_seq,
+                cut_cigar_kwargs=cut_cigar_kwargs,
+            ),
+        ).alias("_func_output"),
+    ).unnest("_func_output")
