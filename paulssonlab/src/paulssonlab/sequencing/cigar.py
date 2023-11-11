@@ -59,7 +59,7 @@ def _append_cigar(cigar, new):
     if len(cigar) and cigar[-1][0] == new[0]:
         old_length = cigar[-1][1]
         cigar[-1] = (new[0], old_length + new[1])
-    else:
+    elif new[1] != 0:
         cigar.append(new)
     return cigar
 
@@ -130,6 +130,8 @@ def cut_cigar(
                             )
                 segment_idx += 1
             if segment_idx == len(segment_lengths):
+                if cigar_idx < len(cigar) or op_length != 0:
+                    raise ValueError("path contained more bases than cigar")
                 break
             else:
                 segment_length = segment_lengths[segment_idx]
@@ -161,6 +163,8 @@ def cut_cigar(
                 cigar_idx += 1
             if cigar_idx == len(cigar):
                 op = None
+            elif cigar_idx >= len(cigar):
+                raise ValueError("path contained fewer bases than cigar")
             else:
                 op = cigar[cigar_idx][0]
                 op_length = cigar[cigar_idx][1]
