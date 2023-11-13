@@ -19,5 +19,5 @@ publish_fastq = true
 gfa_grouping = "references/barcode.gfa"
 gfa_variants = "references/pLIB419.gfa"
 consensus_args = "--method spoa --min-depth 3"
-consensus_jobs = 5#100
-consensus_jobs_per_align_job = 2#10
+consensus_jobs = 100
+consensus_jobs_per_align_job = 10

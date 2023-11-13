@@ -6,7 +6,12 @@ include { DORADO_DOWNLOAD;
           DORADO_DUPLEX; DORADO_BASECALLER } from '../../modules/dorado.nf'
 include { SAMTOOLS_FASTQ } from '../../modules/samtools.nf'
 include { GRAPHALIGNER as GRAPHALIGNER_GROUPING; GRAPHALIGNER as GRAPHALIGNER_VARIANTS } from '../../modules/graphaligner.nf'
-include { JOIN_GAF as JOIN_GAF_GROUPING; JOIN_GAF as JOIN_GAF_VARIANTS; PREPARE_READS; CONSENSUS } from '../../modules/scripts.nf'
+include { JOIN_GAF as JOIN_GAF_GROUPING;
+          JOIN_GAF as JOIN_GAF_VARIANTS;
+          PREPARE_READS;
+          CONSENSUS;
+          REALIGN;
+          EXTRACT_SEGMENTS } from '../../modules/scripts.nf'
 
 workflow NANOPORE_FISH {
     take:
@@ -18,7 +23,9 @@ workflow NANOPORE_FISH {
         graphaligner_args: "-x dbg",
         prepare_reads_args: "-x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2",
         consensus_jobs: 1000,
-        consensus_jobs_per_align_job: 10
+        consensus_jobs_per_align_job: 10,
+        join_gaf_variants_args: "--reads-prefix read_group_ --gaf-prefix consensus_",
+        extract_segments_args: "--path-col path_consensus --cigar-col cg_realign",
     ]
     samples_in
         .map {
@@ -157,8 +164,8 @@ workflow NANOPORE_FISH {
             if (it.get("publish_pod5")) {
                 def output_dir = file_in_dir(it.output_run_dir, "pod5")
                 output_dir.mkdirs()
-                it.pod5.each { pod5_file ->
-                    pod5_file.toRealPath().mklink(file_in_dir(output_dir, pod5_file.name), overwrite: true)
+                it.pod5.each { output_file ->
+                    output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
                 }
             }
         }
@@ -209,8 +216,8 @@ workflow NANOPORE_FISH {
             if (it.get("publish_bam")) {
                 def output_dir = file_in_dir(it.output_run_dir, "bam")
                 output_dir.mkdirs()
-                it.bam.collect { bam_file ->
-                    bam_file.toRealPath().mklink(file_in_dir(output_dir, bam_file.name), overwrite: true)
+                it.bam.collect { output_file ->
+                    output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
                 }
             }
         }
@@ -230,8 +237,8 @@ workflow NANOPORE_FISH {
             if (it.get("publish_fastq")) {
                 def output_dir = file_in_dir(it.output_run_dir, "fastq")
                 output_dir.mkdirs()
-                it.fastq.collect { fastq_file ->
-                    fastq_file.toRealPath().mklink(file_in_dir(output_dir, fastq_file.name), overwrite: true)
+                it.fastq.collect { output_file ->
+                    output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
                 }
             }
         }
@@ -257,7 +264,6 @@ workflow NANOPORE_FISH {
             [*:it, bam_and_gaf: [it.bam, it.gaf_grouping].transpose()]
         }
         .set { ch_graphaligner_grouping }
-    ch_graphaligner_grouping
     // bin/join_gaf.py a.bam a.gaf out.arrow
     with_aliased_keys(ch_graphaligner_grouping, [join_gaf_args: "join_gaf_grouping_args"]) {
         map_call_process(JOIN_GAF_GROUPING,
@@ -308,14 +314,62 @@ workflow NANOPORE_FISH {
             def consensus_fasta = align_chunks.collect { chunks -> chunks.collect { files -> files[1] } }
             [*:it, consensus_tabular: consensus_tabular, consensus_fasta: consensus_fasta]
         }
-    .set { samples }
-    //     .set { ch_consensus_regrouped }
+        .set { ch_consensus_rechunked }
     // GraphAligner -t 1 -x dbg out3.fasta out3.gaf
+    with_aliased_keys(ch_consensus_rechunked, [graphaligner_args: "graphaligner_variants_args"]) {
+        map_call_process(GRAPHALIGNER_VARIANTS,
+            it,
+            ["consensus_fasta", "gfa_variants", "graphaligner_args"],
+            [id: { fasta, meta -> exemplar(fasta).baseName }],
+            "consensus_fasta",
+            ["gaf_variants"],
+            "_GRAPHALIGNER_VARIANTS") { fasta, meta -> [fasta, meta.gfa_variants] }
+        }
+        .map {
+            // bam, gaf -> [(bam, gaf), ...]
+            [*:it, consensus_and_gaf: [it.consensus_tabular, it.gaf_variants].transpose()]
+        }
+        .set { ch_graphaligner_variants }
     // bin/join_gaf.py --gaf out3.gaf --reads-prefix read_group_ --gaf-prefix consensus_
-    // bin/realign.py --gfa full.gfa out3.arrow out3
-    // bin/extract_segments.py --path-col path_consensus --cigar-col cg_realign --gfa full.gfa realigned3.arrow realigned3_extracted.arrow
+    with_aliased_keys(ch_graphaligner_variants, [join_gaf_args: "join_gaf_variants_args"]) {
+        map_call_process(JOIN_GAF_VARIANTS,
+            it,
+            ["consensus_and_gaf", "join_gaf_args", "tabular_format"],
+            [id: { consensus_and_gaf, meta -> exemplar(consensus_and_gaf)[0].baseName }],
+            "consensus_and_gaf",
+            ["join_gaf_variants_output"],
+            "_JOIN_GAF_VARIANTS") { consensus_and_gaf, meta -> [consensus_and_gaf[0], consensus_and_gaf[1]] }
+        }
+        .set { ch_join_gaf_variants }
+    // bin/realign.py --gfa full.gfa out3.arrow out3_realigned.arrow
+    map_call_process(REALIGN,
+        ch_join_gaf_variants,
+        ["join_gaf_variants_output", "gfa_variants", "realign_args", "tabular_format"],
+        [id: { join_gaf_variants_output, meta -> join_gaf_variants_output.baseName }],
+        "join_gaf_variants_output",
+        ["realign_output"],
+        "_REALIGN") { join_gaf_variants_output, meta -> [join_gaf_variants_output, meta.gfa_variants] }
+        .set { ch_realign }
     // bin/join_gaf.py "*.arrow" combined.arrow
-    // .mix(ch_to_align.no)
+    // bin/extract_segments.py --path-col path_consensus --cigar-col cg_realign --gfa full.gfa realigned3.arrow realigned3_extracted.arrow
+    map_call_process(EXTRACT_SEGMENTS,
+        ch_realign,
+        ["realign_output", "gfa_variants", "extract_segments_args", "tabular_format"],
+        [id: { realign_output, meta -> realign_output.baseName }],
+        "realign_output",
+        ["extract_segments_output"],
+        "_EXTRACT_SEGMENTS") { realign_output, meta -> [realign_output, meta.gfa_variants] }
+        .set { ch_extract_segments }
+    // publish tabular output
+    ch_extract_segments.subscribe {
+            def output_dir = file_in_dir(it.output_run_dir, "extract_segments")
+            output_dir.mkdirs()
+            it.extract_segments_output.collect { output_file ->
+                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+            }
+        }
+    ch_extract_segments.mix(ch_to_align.no)
+        .set { samples }
 
     samples.view()
 
