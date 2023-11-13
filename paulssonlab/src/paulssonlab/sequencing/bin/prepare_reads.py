@@ -23,14 +23,21 @@ def prepare_reads(
     gfa_filename,
     input_filename,
     output_filename,
-    format,
+    input_format,
+    output_format,
     include,
     include_prefix,
     exclude,
     exclude_prefix,
     keep_partial_paths,
 ):
-    format = detect_format(format, input_filename[0], ["arrow", "parquet"], glob=True)
+    input_format = detect_format(
+        input_format,
+        input_filename[0],
+        ["arrow", "parquet"],
+        glob=True,
+    )
+    output_format = detect_format(output_format, output_filename, ["arrow", "parquet"])
     gfa = gfapy.Gfa.from_file(gfa_filename)
     gfa = filter_gfa(gfa, include, include_prefix, exclude, exclude_prefix)
     graph = gfa_to_dag(gfa)
@@ -42,9 +49,9 @@ def prepare_reads(
     else:
         endpoints = dag_endpoints(graph, wccs=wccs)
     with pl.StringCache():
-        if format == "arrow":
+        if input_format == "arrow":
             df = pl.concat([pl.scan_ipc(f) for f in input_filename])
-        elif format == "parquet":
+        elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename])
         df = normalize_path(df, forward_segments, endpoints=endpoints)
         # identify_usable_reads is much faster when working on in-memory data
@@ -53,16 +60,21 @@ def prepare_reads(
         # so I'm arbitrarily choosing to do it lazily
         df = identify_usable_reads(df)
         df = df.collect()
-        if format == "arrow":
+        if output_format == "arrow":
             df.write_ipc(output_filename)
-        elif format == "parquet":
+        elif output_format == "parquet":
             df.write_parquet(output_filename)
 
 
 @click.command(context_settings={"show_default": True})
 @click.option(
-    "-f",
-    "--format",
+    "-i",
+    "--input-format",
+    type=click.Choice(["bam", "parquet", "arrow"], case_sensitive=False),
+)
+@click.option(
+    "-o",
+    "--output-format",
     type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
 @filter_gfa_options
@@ -78,7 +90,8 @@ def cli(
     gfa,
     input,
     output,
-    format,
+    input_format,
+    output_format,
     include,
     include_prefix,
     exclude,
@@ -86,10 +99,11 @@ def cli(
     keep_partial_paths,
 ):
     prepare_reads(
+        gfa,
         input,
         output,
-        format,
-        gfa,
+        input_format,
+        output_format,
         include,
         include_prefix,
         exclude,

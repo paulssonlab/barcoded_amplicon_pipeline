@@ -44,49 +44,52 @@ def compute_consensus_seqs(
         )
     if not any([output_filename, fasta_filename, fastq_filename]):
         raise ValueError("at least one of --output, --fasta, --fastq must be given")
-    if input_format == "arrow":
-        df = pl.concat([pl.scan_ipc(f) for f in input_filename])
-    elif input_format == "parquet":
-        df = pl.concat([pl.scan_parquet(f) for f in input_filename])
-    if group:
-        df = df.filter(pl.col("path").hash() % group[1] == group[0])
-    df = compute_depth(df)
-    exprs = []
-    if min_depth:
-        exprs.append(pl.col("depth") > min_depth)
-    if min_simplex_depth:
-        exprs.append(pl.col("simplex_depth") > min_simplex_depth)
-    if min_duplex_depth:
-        exprs.append(pl.col("duplex_depth") > min_duplex_depth)
-    if exprs:
-        df = df.filter(*exprs)
-    df = map_read_groups(
-        df,
-        partial(
-            get_consensus_group_by,
-            method=method,
-            use_phreds=use_phreds,
-            return_phreds=output_phreds,
-            **consensus_kwargs,
-        ),
-    )
-    # TODO: try streaming?
-    df = df.collect()
-    if fasta_filename:
-        write_fastx(
-            fasta_filename, df.get_column("consensus_seq"), names=df.get_column("name")
+    with pl.StringCache():
+        if input_format == "arrow":
+            df = pl.concat([pl.scan_ipc(f) for f in input_filename])
+        elif input_format == "parquet":
+            df = pl.concat([pl.scan_parquet(f) for f in input_filename])
+        if group:
+            df = df.filter(pl.col("path").hash() % group[1] == group[0])
+        df = compute_depth(df)
+        exprs = []
+        if min_depth:
+            exprs.append(pl.col("depth") > min_depth)
+        if min_simplex_depth:
+            exprs.append(pl.col("simplex_depth") > min_simplex_depth)
+        if min_duplex_depth:
+            exprs.append(pl.col("duplex_depth") > min_duplex_depth)
+        if exprs:
+            df = df.filter(*exprs)
+        df = map_read_groups(
+            df,
+            partial(
+                get_consensus_group_by,
+                method=method,
+                use_phreds=use_phreds,
+                return_phreds=output_phreds,
+                **consensus_kwargs,
+            ),
         )
-    if fastq_filename:
-        write_fastx(
-            fastq_filename,
-            df.get_column("consensus_seq"),
-            phreds=df.get_column("consensus_phred"),
-            names=df.get_column("name"),
-        )
-    if output_format == "arrow":
-        df.write_ipc(output_filename)
-    elif output_format == "parquet":
-        df.write_parquet(output_filename)
+        # TODO: try streaming?
+        df = df.collect()
+        if fasta_filename:
+            write_fastx(
+                fasta_filename,
+                df.get_column("consensus_seq"),
+                names=df.get_column("name"),
+            )
+        if fastq_filename:
+            write_fastx(
+                fastq_filename,
+                df.get_column("consensus_seq"),
+                phreds=df.get_column("consensus_phred"),
+                names=df.get_column("name"),
+            )
+        if output_format == "arrow":
+            df.write_ipc(output_filename)
+        elif output_format == "parquet":
+            df.write_parquet(output_filename)
 
 
 def _parse_group(ctx, param, value):

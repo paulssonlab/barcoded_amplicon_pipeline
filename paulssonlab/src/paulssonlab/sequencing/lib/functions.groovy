@@ -228,22 +228,21 @@ static def remove_keys(map, keys) {
     new_map
 }
 
-// map should be a map [k1:closure1, k2:closure2, ...]
-// returns a map [k1:closure1(x), k2:closure2(x), ...]
-// for some fixed value x
+// map should be a map [k1:closure1, k2:non-closure2, ...]
+// returns a map [k1:closure1(x), k2:non-closure2, ...]
+// for some fixed value x (x can be multiple objects)
 static def collect_closures(map, Object... args) {
-    map.collectEntries { k, v -> [(k): v(*args)] }
+    map.collectEntries { k, v -> [(k): v instanceof Closure ? v(*args) : v] }
 }
 
-static def with_aliased_keys(ch, alias_map, Closure closure) {
+static def with_keys(ch, closure_map, Closure closure) {
     def closure_input = ch.map {
-        def new_map = alias_map.collectEntries { new_key, old_key -> [(new_key): it.get(old_key)] }
-        [*:it, *:new_map]
+        [*:it, *:collect_closures(closure_map, it)]
     }
     def closure_output = closure(closure_input)
     closure_output.map {
         def new_map = it.clone()
-        new_map.keySet().removeAll(alias_map.keySet())
+        new_map.keySet().removeAll(closure_map.keySet())
         new_map
     }
 }

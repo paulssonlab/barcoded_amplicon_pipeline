@@ -17,8 +17,8 @@ process SAMTOOLS_FASTQ {
     script:
     def args = meta.samtools_fastq_args ?: "-c 1"
     """
-    #samtools fastq -@ ${task.cpus} ${args} ${bam} -o ${meta.id}.fastq.gz
-    samtools view -s 17.01 ${bam} | samtools fastq ${args} -o ${meta.id}.fastq.gz
+    samtools fastq -@ ${task.cpus} ${args} ${bam} -0 ${meta.id}.fastq.gz
+    #samtools view -s 17.1 ${bam} | samtools fastq ${args} -0 ${meta.id}.fastq.gz -
     """
 
     stub:
