@@ -6,7 +6,7 @@ include { DORADO_DOWNLOAD;
           DORADO_DUPLEX; DORADO_BASECALLER } from '../../modules/dorado.nf'
 include { SAMTOOLS_FASTQ } from '../../modules/samtools.nf'
 include { GRAPHALIGNER as GRAPHALIGNER_GROUPING; GRAPHALIGNER as GRAPHALIGNER_VARIANTS } from '../../modules/graphaligner.nf'
-include { JOIN_GAF as JOIN_GAF_GROUPING; JOIN_GAF as JOIN_GAF_VARIANTS } from '../../modules/scripts.nf'
+include { JOIN_GAF as JOIN_GAF_GROUPING; JOIN_GAF as JOIN_GAF_VARIANTS; PREPARE_READS; CONSENSUS } from '../../modules/scripts.nf'
 
 workflow NANOPORE_FISH {
     take:
@@ -16,7 +16,9 @@ workflow NANOPORE_FISH {
     def DEFAULT_ARGS = [
         tabular_format: "arrow",
         graphaligner_args: "-x dbg",
-        prepare_read_args: "-x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2"
+        prepare_reads_args: "-x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2",
+        consensus_jobs: 1000,
+        consensus_jobs_per_align_job: 10
     ]
     samples_in
         .map {
@@ -240,7 +242,6 @@ workflow NANOPORE_FISH {
             no: true
         }
         .set { ch_to_align }
-    // ch_to_align.yes.set { samples }
     // // GraphAligner -t 1 -x dbg -g barcode.gfa -f in.fastq.gz -a out.gaf
     with_aliased_keys(ch_to_align.yes, [graphaligner_args: "graphaligner_grouping_args"]) {
         map_call_process(GRAPHALIGNER_GROUPING,
@@ -252,45 +253,62 @@ workflow NANOPORE_FISH {
             "_GRAPHALIGNER_GROUPING") { fastq, meta -> [fastq, meta.gfa_grouping] }
         }
         .map {
+            // bam, gaf -> [(bam, gaf), ...]
             [*:it, bam_and_gaf: [it.bam, it.gaf_grouping].transpose()]
         }
         .set { ch_graphaligner_grouping }
     ch_graphaligner_grouping
-    // bam, gaf -> [(bam, gaf), ...]
-    // bin/join_gaf.py  a.bam a.gaf out.arrow
+    // bin/join_gaf.py a.bam a.gaf out.arrow
     with_aliased_keys(ch_graphaligner_grouping, [join_gaf_args: "join_gaf_grouping_args"]) {
         map_call_process(JOIN_GAF_GROUPING,
             it,
             ["bam_and_gaf", "join_gaf_args", "tabular_format"],
             [id: { bam_and_gaf, meta -> bam_and_gaf[0].baseName }],
             "bam_and_gaf",
-            ["join_gaf_grouping"],
+            ["join_gaf_grouping_output"],
             "_JOIN_GAF_GROUPING") { bam_and_gaf, meta -> [bam_and_gaf[0], bam_and_gaf[1]] }
         }
-        // .set { ch_join_gaf1 }
-        .set { samples }
-    // bin/prepare_reads.py  --gfa barcode.gfa in.arrow out.arrow -x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2
-    // map_call_process(PREPARE_READS,
-    //     ch_fastq,
-    //     ["pod5", "dorado_model_dir", "dorado_basecaller_args"],
-    //     [id: { pod5, meta -> exemplar(pod5).baseName }],
-    //     "pod5",
-    //     ["bam"],
-    //     "_JOIN_GAF") { pod5, meta -> [pod5, meta.dorado_model_dir] }
-    //     .set { ch_join_gaf1 }
+        .set { ch_join_gaf_grouping }
+    // bin/prepare_reads.py --gfa barcode.gfa in.arrow out.arrow -x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2
+    map_call_process(PREPARE_READS,
+        ch_join_gaf_grouping,
+        ["join_gaf_grouping_output", "gfa_grouping", "prepare_reads_args", "tabular_format"],
+        [id: { join_gaf_grouping_output, meta -> join_gaf_grouping_output.baseName }],
+        "join_gaf_grouping_output",
+        ["prepare_reads_output"],
+        "_PREPARE_READS") { join_gaf_grouping_output, meta -> [join_gaf_grouping_output, meta.gfa_grouping] }
+        .set { ch_prepare_reads }
     // set consensus group size based on file size?
+    ch_prepare_reads.map {
+            [*:it, consensus_groups: (0..<it.consensus_jobs).toList()]
+        }
+        .set { ch_consensus_groups }
     // bin/consensus.py "*.arrow" --output out8.arrow --fasta out8.fasta --group 8/100 --min-depth 5 --no-phred-output (??) --method-spoa
-    // map_call_process(PREPARE_READS,
-    //     ch_join_gaf1,
-    //     ["pod5", "dorado_model_dir", "dorado_basecaller_args"],
-    //     [id: { pod5, meta -> exemplar(pod5).baseName }],
-    //     "pod5",
-    //     ["bam"],
-    //     "_JOIN_GAF") { pod5, meta -> [pod5, meta.dorado_model_dir] }
-    //     .set { ch_consensus }
+    map_call_process(CONSENSUS,
+        ch_consensus_groups,
+        [
+            "consensus_groups",
+            "prepare_reads_output",
+            "consensus_args",
+            "tabular_format"
+        ],
+        [
+            id: { consensus_group, meta -> "consensus-${consensus_group}-of-${meta.consensus_groups.size}" },
+            group: { consensus_group, meta -> "${consensus_group}/${meta.consensus_groups.size}" }
+        ],
+        "consensus_groups",
+        ["consensus_tabular", "consensus_fasta"],
+        "_CONSENSUS") { consensus_group, meta -> [meta.prepare_reads_output] }
+        .set { ch_consensus }
     // regroup (minion: 100 consensus groups -> 10 new groups)
     // need to synchronize fasta regrouping with arrow regrouping
-    // ch_consensus
+    ch_consensus.map {
+            def align_chunks = chunk_files([it.consensus_tabular, it.consensus_fasta].transpose(), it.consensus_jobs_per_align_job)
+            def consensus_tabular = align_chunks.collect { chunks -> chunks.collect { files -> files[0] } }
+            def consensus_fasta = align_chunks.collect { chunks -> chunks.collect { files -> files[1] } }
+            [*:it, consensus_tabular: consensus_tabular, consensus_fasta: consensus_fasta]
+        }
+    .set { samples }
     //     .set { ch_consensus_regrouped }
     // GraphAligner -t 1 -x dbg out3.fasta out3.gaf
     // bin/join_gaf.py --gaf out3.gaf --reads-prefix read_group_ --gaf-prefix consensus_
