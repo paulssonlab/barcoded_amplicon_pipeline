@@ -15,9 +15,10 @@ process SAMTOOLS_FASTQ {
     conda "${params.conda_env_dir}/samtools.yml"
 
     script:
-    def options = meta.samtools_fastq_args ?: "-c 1"
+    def args = meta.samtools_fastq_args ?: "-c 1"
     """
-    samtools fastq -@ ${task.cpus} ${options} ${bam} -o ${meta.id}.fastq.gz
+    #samtools fastq -@ ${task.cpus} ${args} ${bam} -o ${meta.id}.fastq.gz
+    samtools view -s 17.01 ${bam} | samtools fastq ${args} -o ${meta.id}.fastq.gz
     """
 
     stub:

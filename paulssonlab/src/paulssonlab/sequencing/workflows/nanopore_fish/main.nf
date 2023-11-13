@@ -254,7 +254,7 @@ workflow NANOPORE_FISH {
         map_call_process(GRAPHALIGNER_GROUPING,
             it,
             ["fastq", "gfa_grouping", "graphaligner_args"],
-            [id: { fastq, meta -> fastq.baseName }],
+            [id: { fastq, meta -> fastq.name.replaceFirst(/\.fastq\.gz$/, "") }],
             "fastq",
             ["gaf_grouping"],
             "_GRAPHALIGNER_GROUPING") { fastq, meta -> [fastq, meta.gfa_grouping] }

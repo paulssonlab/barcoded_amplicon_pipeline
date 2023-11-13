@@ -15,11 +15,7 @@ process GRAPHALIGNER {
 
     script:
     """
-    GraphAligner -t ${task.cpus} \
-        ${meta.graphaligner_args ?: ""} \
-        -f ${reads} \
-        -g ${gfa} \
-        -a ${meta.id}.gaf
+    GraphAligner -t ${task.cpus} ${meta.graphaligner_args ?: ""} -f ${reads} -g ${gfa} -a ${meta.id}.gaf
     """
 
     stub:

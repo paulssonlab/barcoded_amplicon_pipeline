@@ -16,12 +16,7 @@ process JOIN_GAF {
 
     script:
     """
-    bin/join_gaf.py ${meta.join_gaf_args ?: ""} \
-        --input-format ${meta.tabular_format} \
-        --output-format ${meta.tabular_format} \
-        --gaf ${gaf} \
-        ${input} \
-        ${meta.id}.${meta.tabular_format}
+    ${src}/sequencing/bin/join_gaf.py ${meta.join_gaf_args ?: ""} --input-format ${meta.tabular_format} --output-format ${meta.tabular_format} --gaf ${gaf} ${input} ${meta.id}.${meta.tabular_format}
     """
 
     stub:
@@ -48,12 +43,7 @@ process PREPARE_READS {
 
     script:
     """
-    bin/prepare_reads.py ${meta.prepare_reads_args ?: ""} \
-        --input-format ${meta.tabular_format} \
-        --output-format ${meta.tabular_format} \
-        --gfa ${gfa} \
-        ${input} \
-        ${meta.id}.${meta.tabular_format}
+    ${src}/sequencing/bin/prepare_reads.py ${meta.prepare_reads_args ?: ""} --input-format ${meta.tabular_format} --output-format ${meta.tabular_format} --gfa ${gfa} ${input} ${meta.id}.${meta.tabular_format}
     """
 
     stub:
@@ -80,13 +70,7 @@ process CONSENSUS {
 
     script:
     """
-    bin/consensus.py ${meta.consensus_args ?: ""} \
-        --group ${meta.group}
-        --input-format ${meta.tabular_format} \
-        --output-format ${meta.tabular_format} \
-        --output ${meta.id}.${meta.tabular_format} \
-        --fasta ${meta.id}.fasta \
-        ${input}
+    ${src}/sequencing/bin/consensus.py ${meta.consensus_args ?: ""} --group ${meta.group} --input-format ${meta.tabular_format} --output-format ${meta.tabular_format} --output ${meta.id}.${meta.tabular_format} --fasta ${meta.id}.fasta ${input}
     """
 
     stub:
@@ -114,12 +98,7 @@ process REALIGN {
 
     script:
     """
-    bin/realign.py ${meta.realign_args ?: ""} \
-        --input-format ${meta.tabular_format} \
-        --output-format ${meta.tabular_format} \
-        --gfa ${gfa} \
-        ${input} \
-        ${meta.id}.${meta.tabular_format}
+    ${src}/sequencing/bin/realign.py ${meta.realign_args ?: ""} --input-format ${meta.tabular_format} --output-format ${meta.tabular_format} --gfa ${gfa} ${input} ${meta.id}.${meta.tabular_format}
     """
 
     stub:
@@ -146,12 +125,7 @@ process EXTRACT_SEGMENTS {
 
     script:
     """
-    bin/realign.py ${meta.extract_segments_args ?: ""} \
-        --input-format ${meta.tabular_format} \
-        --output-format ${meta.tabular_format} \
-        --gfa ${gfa} \
-        ${input} \
-        ${meta.id}.${meta.tabular_format}
+    ${src}/sequencing/bin/realign.py ${meta.extract_segments_args ?: ""} --input-format ${meta.tabular_format} --output-format ${meta.tabular_format} --gfa ${gfa} ${input} ${meta.id}.${meta.tabular_format}
     """
 
     stub:
