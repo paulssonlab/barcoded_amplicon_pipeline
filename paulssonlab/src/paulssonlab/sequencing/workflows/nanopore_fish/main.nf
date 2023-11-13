@@ -4,12 +4,20 @@ include { POD5_MERGE; POD5_MERGE as POD5_MERGE2; POD5_VIEW_AND_SUBSET } from '..
 include { DORADO_DOWNLOAD;
           DORADO_DOWNLOAD as DORADO_DOWNLOAD2;
           DORADO_DUPLEX; DORADO_BASECALLER } from '../../modules/dorado.nf'
+include { SAMTOOLS_FASTQ } from '../../modules/samtools.nf'
+include { GRAPHALIGNER as GRAPHALIGNER_GROUPING; GRAPHALIGNER as GRAPHALIGNER_VARIANTS } from '../../modules/graphaligner.nf'
+include { JOIN_GAF as JOIN_GAF_GROUPING; JOIN_GAF as JOIN_GAF_VARIANTS } from '../../modules/scripts.nf'
 
 workflow NANOPORE_FISH {
     take:
     samples_in
 
     main:
+    def DEFAULT_ARGS = [
+        tabular_format: "arrow",
+        graphaligner_args: "-x dbg",
+        prepare_read_args: "-x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2"
+    ]
     samples_in
         .map {
             if (it.get("basecall") && !it.get("pod5_input")) {
@@ -19,22 +27,44 @@ workflow NANOPORE_FISH {
                 throw new Exception("cannot specify both bam_input and fastq_input")
             }
             if (!it.get("basecall") && !it.get("bam_input") && !it.get("fastq_input")) {
-                throw new Exception("bam_input or fastq_input if not basecalling")
+                throw new Exception("one of bam_input or fastq_input required if not basecalling")
+            }
+            it
+        }
+        .map {
+            it = [*:DEFAULT_ARGS, *:it]
+            it = [
+                gfa_grouping: it.get("gfa"),
+                gfa_variants: it.get("gfa"),
+                graphaligner_grouping_args: it.get("graphaligner_args"),
+                graphaligner_variants_args: it.get("graphaligner_args"),
+                join_gaf_grouping_args: it.get("join_gaf_args"),
+                join_gaf_variants_args: it.get("join_gaf_args"),
+                *:it
+            ]
+            if (it.getOrDefault("align", true)) {
+                if (!it.get("gfa_grouping")) {
+                    throw new Exception("gfa or gfa_grouping must be specified if aligning")
+                }
+                if (!it.get("gfa_variants")) {
+                    throw new Exception("gfa or gfa_variants must be specified if aligning")
+                }
             }
             it
         }
         .branch {
-            yes: it.get("basecall")
-            no: true
+            pod5: it.get("basecall")
+            bam: it.get("bam_input")
+            fastq: it.get("fastq_input")
         }
-        .set { ch_do_basecall }
-    ch_do_basecall.yes.branch {
+        .set { ch_input_type }
+    ch_input_type.pod5.branch {
             // chunk pod5 files UNLESS:
             // map contains the key pod5_chunk and it is false
             // OR both pod5_chunk_bytes and pod5_chunk_files are falsy
-            yes: !((it.containsKey("pod5_chunk") && !it["pod5_chunk"])
-                                        || (!it.get("pod5_chunk_bytes")
-                                            && !it.get("pod5_chunk_files")))
+            yes: !(!it.getOrDefault("pod5_chunk", true)
+                    || (!it.get("pod5_chunk_bytes")
+                        && !it.get("pod5_chunk_files")))
             no: true
         }
         .set { ch_do_pod5_chunk }
@@ -174,46 +204,100 @@ workflow NANOPORE_FISH {
     ch_dorado_basecaller.mix(ch_dorado_duplex)
         .set { ch_basecalled }
     ch_basecalled.subscribe {
-            def output_dir = file_in_dir(it.output_run_dir, "bam")
-            output_dir.mkdirs()
-            it.bam.collect { bam_file ->
-                bam_file.toRealPath().mklink(file_in_dir(output_dir, bam_file.name), overwrite: true)
+            if (it.get("publish_bam")) {
+                def output_dir = file_in_dir(it.output_run_dir, "bam")
+                output_dir.mkdirs()
+                it.bam.collect { bam_file ->
+                    bam_file.toRealPath().mklink(file_in_dir(output_dir, bam_file.name), overwrite: true)
+                }
             }
         }
-    ch_basecalled
+    ch_basecalled.mix(ch_input_type.bam.map { [*:it, bam: it.bam_input] } )
+        .set { ch_bam }
+    // use samtools to convert sam to fastq.gz
+    map_call_process(SAMTOOLS_FASTQ,
+        ch_bam,
+        ["bam", "samtools_fastq_args"],
+        [id: { bam, meta -> bam.baseName }],
+        "bam",
+        ["fastq"],
+        "_SAMTOOLS_FASTQ") { bam, meta -> [bam] }
+        .set { ch_converted_to_fastq }
+    // publish fastq
+    ch_converted_to_fastq.subscribe {
+            if (it.get("publish_fastq")) {
+                def output_dir = file_in_dir(it.output_run_dir, "fastq")
+                output_dir.mkdirs()
+                it.fastq.collect { fastq_file ->
+                    fastq_file.toRealPath().mklink(file_in_dir(output_dir, fastq_file.name), overwrite: true)
+                }
+            }
+        }
+    ch_converted_to_fastq.mix(ch_input_type.fastq.map { [*:it, fastq: it.fastq_input] })
+       .set { ch_fastq }
+    ch_fastq.branch {
+            yes: it.getOrDefault("align", true)
+            no: true
+        }
+        .set { ch_to_align }
+    // ch_to_align.yes.set { samples }
+    // // GraphAligner -t 1 -x dbg -g barcode.gfa -f in.fastq.gz -a out.gaf
+    with_aliased_keys(ch_to_align.yes, [graphaligner_args: "graphaligner_grouping_args"]) {
+        map_call_process(GRAPHALIGNER_GROUPING,
+            it,
+            ["fastq", "gfa_grouping", "graphaligner_args"],
+            [id: { fastq, meta -> fastq.baseName }],
+            "fastq",
+            ["gaf_grouping"],
+            "_GRAPHALIGNER_GROUPING") { fastq, meta -> [fastq, meta.gfa_grouping] }
+        }
+        .map {
+            [*:it, bam_and_gaf: [it.bam, it.gaf_grouping].transpose()]
+        }
+        .set { ch_graphaligner_grouping }
+    ch_graphaligner_grouping
+    // bam, gaf -> [(bam, gaf), ...]
+    // bin/join_gaf.py  a.bam a.gaf out.arrow
+    with_aliased_keys(ch_graphaligner_grouping, [join_gaf_args: "join_gaf_grouping_args"]) {
+        map_call_process(JOIN_GAF_GROUPING,
+            it,
+            ["bam_and_gaf", "join_gaf_args", "tabular_format"],
+            [id: { bam_and_gaf, meta -> bam_and_gaf[0].baseName }],
+            "bam_and_gaf",
+            ["join_gaf_grouping"],
+            "_JOIN_GAF_GROUPING") { bam_and_gaf, meta -> [bam_and_gaf[0], bam_and_gaf[1]] }
+        }
+        // .set { ch_join_gaf1 }
         .set { samples }
-
-    // publish fastq.gz (publish_fastq)
-    // filter dx:0/1 from bam -> fastq.gz
-    // porechop_abi
-    // minigraph barcode_v1.gfa
-    // parse gaf, output mapping of barcode to list of read ids (using pyarrow dump)
-    // index fastq
-    // download medaka model
-    // consensus.py
-    // identify_variants.py
-    // merge parquets
-
-        // | map {
-        //     if (it.get("filtered_reads")) {
-        //         rename_key(rename_key(it, "reads", "unfiltered_reads"), "filtered_reads", "reads")
-        //     } else {
-        //         it
-        //     }
-        // }
-        // | call_MINIMAP2_ALIGN
-        // | call_SAMTOOLS_INDEX
-        // | map {
-        //     it.output_run_dir.mkdirs()
-        //     ["reference", "reads", "bam", "bam_index"].each { k ->
-        //         (it[k] instanceof Collection ? it[k] : [it[k]]).each { src ->
-        //             Files.copy(src, file_in_dir(it.output_run_dir, src.name),
-        //                        StandardCopyOption.REPLACE_EXISTING)
-        //         }
-        //     }
-        //     it
-        // }
-        // | set { samples }
+    // bin/prepare_reads.py  --gfa barcode.gfa in.arrow out.arrow -x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2
+    // map_call_process(PREPARE_READS,
+    //     ch_fastq,
+    //     ["pod5", "dorado_model_dir", "dorado_basecaller_args"],
+    //     [id: { pod5, meta -> exemplar(pod5).baseName }],
+    //     "pod5",
+    //     ["bam"],
+    //     "_JOIN_GAF") { pod5, meta -> [pod5, meta.dorado_model_dir] }
+    //     .set { ch_join_gaf1 }
+    // set consensus group size based on file size?
+    // bin/consensus.py "*.arrow" --output out8.arrow --fasta out8.fasta --group 8/100 --min-depth 5 --no-phred-output (??) --method-spoa
+    // map_call_process(PREPARE_READS,
+    //     ch_join_gaf1,
+    //     ["pod5", "dorado_model_dir", "dorado_basecaller_args"],
+    //     [id: { pod5, meta -> exemplar(pod5).baseName }],
+    //     "pod5",
+    //     ["bam"],
+    //     "_JOIN_GAF") { pod5, meta -> [pod5, meta.dorado_model_dir] }
+    //     .set { ch_consensus }
+    // regroup (minion: 100 consensus groups -> 10 new groups)
+    // need to synchronize fasta regrouping with arrow regrouping
+    // ch_consensus
+    //     .set { ch_consensus_regrouped }
+    // GraphAligner -t 1 -x dbg out3.fasta out3.gaf
+    // bin/join_gaf.py --gaf out3.gaf --reads-prefix read_group_ --gaf-prefix consensus_
+    // bin/realign.py --gfa full.gfa out3.arrow out3
+    // bin/extract_segments.py --path-col path_consensus --cigar-col cg_realign --gfa full.gfa realigned3.arrow realigned3_extracted.arrow
+    // bin/join_gaf.py "*.arrow" combined.arrow
+    // .mix(ch_to_align.no)
 
     samples.view()
 
@@ -222,11 +306,10 @@ workflow NANOPORE_FISH {
 }
 
 workflow MAIN {
-    // download_data(params) // TODO: remove?
-    samples_preglob = get_samples(params, [:], true)
-    glob_inputs(samples_preglob, params.root, ["fastq_input", "bam_input", "pod5_input"])
-        | NANOPORE_FISH
-        | set { samples }
+    samples_in = get_samples(params, [:], true)
+    samples_in = find_inputs(samples_in, params.root, ["gfa_grouping", "gfa_variants", "gfa"])
+    samples_in = glob_inputs(samples_in, params.root, ["fastq_input", "bam_input", "pod5_input"])
+    samples = NANOPORE_FISH(samples_in)
 
     emit:
     samples

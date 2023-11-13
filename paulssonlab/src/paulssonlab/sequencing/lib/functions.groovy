@@ -88,9 +88,10 @@ static def glob_inputs(ch, base, input_names) {
 
 static def find_inputs(ch, base, input_names) {
     ch.map { it ->
+        it = it.clone()
         input_names.each { k ->
             if (it.get(k) && file_in_dir(base, it[k]).exists()) {
-                it[k] = file_in_dir(base, k)
+                it[k] = file_in_dir(base, it[k])
             } else {
                 it.remove(k)
             }
@@ -232,6 +233,19 @@ static def remove_keys(map, keys) {
 // for some fixed value x
 static def collect_closures(map, Object... args) {
     map.collectEntries { k, v -> [(k): v(*args)] }
+}
+
+static def with_aliased_keys(ch, alias_map, Closure closure) {
+    def closure_input = ch.map {
+        def new_map = alias_map.collectEntries { new_key, old_key -> [(new_key): it.get(old_key)] }
+        [*:it, *:new_map]
+    }
+    def closure_output = closure(closure_input)
+    closure_output.map {
+        def new_map = it.clone()
+        new_map.keySet().removeAll(alias_map.keySet())
+        new_map
+    }
 }
 
 // see below. call_closure is the same as call_process except it does not uniquify the channel
