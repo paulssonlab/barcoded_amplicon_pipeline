@@ -4,6 +4,7 @@ from itertools import takewhile
 
 from gfapy import Gfa
 
+from paulssonlab.sequencing.gfa import gfa_name_mapping
 from paulssonlab.util.sequence import reverse_complement
 
 # FROM: https://github.com/jeffdaily/parasail/blob/600fb26151ff19899ee39a214972dcf2b9b11ed7/src/cigar.c#L18
@@ -51,7 +52,7 @@ def decode_cigar(s):
 def _parse_variant(s):
     try:
         return int(s)
-    except:
+    except ValueError:
         return s
 
 
@@ -85,7 +86,7 @@ def cut_cigar(
         # the below code chokes if cigar or path is empty
         return {}
     if isinstance(name_to_seq, Gfa):
-        name_to_seq = sgfa.gfa_name_mapping(name_to_seq)
+        name_to_seq = gfa_name_mapping(name_to_seq)
     segment_lengths = [len(name_to_seq[name]) for name in path]
     segment_names = [name[1:] for name in path]
     segment_rc = [name[0] == "<" for name in path]
@@ -95,8 +96,6 @@ def cut_cigar(
         segment_rc = [False, *segment_rc, False]
     if segments:
         segments = set(segments)
-    else:
-        segments = set(segment_names)
     segment_idx = 0
     cigar_idx = 0
     query_idx = 0
@@ -106,7 +105,7 @@ def cut_cigar(
         if (first or op != CigarOp.I) and (first or segment_length == 0):
             if not first:
                 end_idx = query_idx
-                if segment_name in segments:
+                if segments is None or segment_name in segments:
                     if return_indices:
                         res[segment_name]["start"] = start_idx
                         res[segment_name]["end"] = end_idx
@@ -136,20 +135,20 @@ def cut_cigar(
             else:
                 segment_length = segment_lengths[segment_idx]
                 segment_name = segment_names[segment_idx]
-                if "=" in segment_name:
-                    eq_idx = segment_name.index("=")
+                if variant_sep is not None and variant_sep in segment_name:
+                    sep_idx = segment_name.index(variant_sep)
                     segment_name, variant_name = (
-                        segment_name[:eq_idx],
-                        _parse_variant(segment_name[eq_idx + 1 :]),
+                        segment_name[:sep_idx],
+                        _parse_variant(segment_name[sep_idx + 1 :]),
                     )
                 else:
                     variant_name = None
                 start_idx = query_idx
-                if segment_name in segments:
+                if segments is None or segment_name in segments:
                     if segment_name in res:
                         raise ValueError(f"duplicate segment: {segment_name}")
                     res[segment_name] = {}
-                    if variant_name is not None:
+                    if variant_name is not None and return_variants:
                         res[segment_name]["variant"] = variant_name
                     if return_counts:
                         for col_name in OP_TO_COLUMN_NAME.values():
@@ -177,7 +176,7 @@ def cut_cigar(
         op_length -= advance
         if op in [CigarOp.D, CigarOp["="], CigarOp.X]:
             segment_length -= advance
-        if segment_name in segments and op is not None:
+        if (segments is None or segment_name in segments) and op is not None:
             if return_counts:
                 res[segment_name][OP_TO_COLUMN_NAME[op]] += advance
             if return_cigars:

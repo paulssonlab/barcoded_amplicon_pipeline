@@ -126,7 +126,8 @@ def cli(
         None if no_phred_col else phred_col,
         keep_full,
         dict(
-            segments=segments,
+            # cut_cigar will return empty output if segments is an empty list
+            segments=segments or None,
             variant_sep=variant_sep,
             key_sep=column_sep,
             return_indices=indices,

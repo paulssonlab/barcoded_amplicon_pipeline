@@ -1,9 +1,15 @@
+from collections import defaultdict
 from functools import partial
 
 import polars as pl
 
 from paulssonlab.sequencing.align import pairwise_align
-from paulssonlab.sequencing.cigar import cut_cigar, decode_cigar
+from paulssonlab.sequencing.cigar import (
+    OP_TO_COLUMN_NAME,
+    _parse_variant,
+    cut_cigar,
+    decode_cigar,
+)
 from paulssonlab.sequencing.gfa import assemble_seq_from_path, gfa_name_mapping
 
 
@@ -292,7 +298,7 @@ def pairwise_align_df_to_path(
     ).unnest("_func_output")
 
 
-def _cut_cigar_rows(rows, name_to_seq=None, cut_cigar_kwargs={}):
+def _cut_cigar_rows(rows, name_to_seq=None, cut_cigar_kwargs={}, dtype=None):
     paths = rows.struct.field("path")
     cigars = rows.struct.field("cigar")
     if "seq" in rows.struct.fields:
@@ -315,8 +321,75 @@ def _cut_cigar_rows(rows, name_to_seq=None, cut_cigar_kwargs={}):
                 **cut_cigar_kwargs,
             )
             for idx in range(len(rows))
-        ]
+        ],
+        dtype=dtype,
     )
+
+
+def _cut_cigar_dtype(
+    segment_names,
+    sequence_dtype=None,
+    phred_dtype=None,
+    segments=None,
+    variant_sep="=",
+    key_sep="|",
+    return_indices=True,
+    return_counts=True,
+    return_cigars=True,
+    cigar_as_string=True,
+    return_variants=True,
+    separate_ends=True,
+):
+    if not cigar_as_string:
+        raise ValueError("cigar_as_string=False is not supported")
+    if key_sep is None:
+        raise ValueError("key_sep=None is not supported")
+    dtype = {}
+    if separate_ends:
+        segment_names = ["upstream", *segment_names, "downstream"]
+    variants = defaultdict(list)
+    full_to_segment_name = {}
+    for segment_name in segment_names:
+        if variant_sep in segment_name:
+            full_segment_name = segment_name
+            sep_idx = segment_name.index(variant_sep)
+            segment_name, variant_name = (
+                segment_name[:sep_idx],
+                _parse_variant(segment_name[sep_idx + 1 :]),
+            )
+            full_to_segment_name[full_segment_name] = segment_name
+            variants[segment_name].append(variant_name)
+    segments_to_variant_type = {}
+    for k in variants:
+        if all(isinstance(v, int) for v in variants[k]):
+            segments_to_variant_type[k] = pl.Int32
+        else:
+            segments_to_variant_type[k] = pl.Utf8
+    if return_variants:
+        dtype[f"{segment_name}{key_sep}variant"] = pl.Utf8
+    for segment_name in segment_names:
+        if segment_name in full_to_segment_name:
+            segment_name = full_to_segment_name[segment_name]
+            if return_variants:
+                dtype[f"{segment_name}{key_sep}variant"] = segments_to_variant_type[
+                    segment_name
+                ]
+        if segments is not None and segment_name not in segments:
+            continue
+        if sequence_dtype is not None:
+            dtype[f"{segment_name}{key_sep}seq"] = sequence_dtype
+        if phred_dtype is not None:
+            dtype[f"{segment_name}{key_sep}phred"] = phred_dtype
+        if return_indices:
+            dtype[f"{segment_name}{key_sep}start"] = pl.Int32
+            dtype[f"{segment_name}{key_sep}end"] = pl.Int32
+            dtype[f"{segment_name}{key_sep}reverse_complement"] = pl.Boolean
+        if return_counts:
+            for op in OP_TO_COLUMN_NAME.values():
+                dtype[f"{segment_name}{key_sep}{op}"] = pl.Int32
+        if return_cigars:
+            dtype[f"{segment_name}{key_sep}cigar"] = pl.Utf8
+    return pl.Struct(dtype)
 
 
 def cut_cigar_df(
@@ -345,18 +418,23 @@ def cut_cigar_df(
     exclude_columns = []
     if keep_full:
         exclude_columns = []
+    dtype = _cut_cigar_dtype(
+        [s[1:] for s in name_to_seq.keys()],
+        sequence_dtype=df.schema.get(sequence_column),
+        phred_dtype=df.schema.get(phred_column),
+        **cut_cigar_kwargs,
+    )
     return df.select(
         pl.all().exclude(exclude_columns),
         pl.struct(**struct)
-        # TODO: dtype depends on cut_cigar_kwargs in complicated ways
-        # so we don't supply it
-        # polars docs says this is an error but still supported (??)
-        # in any case, it works for now
         .map_batches(
             partial(
                 _cut_cigar_rows,
                 name_to_seq=name_to_seq,
                 cut_cigar_kwargs=cut_cigar_kwargs,
+                dtype=dtype,
             ),
-        ).alias("_func_output"),
+            return_dtype=dtype,
+        )
+        .alias("_func_output"),
     ).unnest("_func_output")
