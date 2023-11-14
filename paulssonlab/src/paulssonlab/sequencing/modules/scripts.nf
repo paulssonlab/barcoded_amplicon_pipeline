@@ -1,8 +1,8 @@
 process JOIN_GAF {
     tag "$meta.id"
 
-    time = 10.min
-    memory = 4.GB
+    time 10.min
+    memory 4.GB
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gaf)
@@ -28,8 +28,8 @@ process JOIN_GAF {
 process PREPARE_READS {
     tag "$meta.id"
 
-    time = 10.min
-    memory = 12.GB
+    time 10.min
+    memory 12.GB
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)
@@ -55,8 +55,10 @@ process PREPARE_READS {
 process CONSENSUS {
     tag "$meta.id"
 
-    time = 1.hours
-    memory = 4.GB
+    time 2.hours
+    memory 8.GB
+
+    errorStrategy "retry"
 
     input:
     tuple val(meta), path(input, stageAs: "input/*")
@@ -83,8 +85,8 @@ process CONSENSUS {
 process REALIGN {
     tag "$meta.id"
 
-    time = 1.hours
-    memory = 1.GB
+    time 1.hours
+    memory 1.GB
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)
@@ -110,8 +112,8 @@ process REALIGN {
 process EXTRACT_SEGMENTS {
     tag "$meta.id"
 
-    time = 10.min
-    memory = 1.GB
+    time 10.min
+    memory 1.GB
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)

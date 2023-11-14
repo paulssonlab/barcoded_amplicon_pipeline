@@ -3,8 +3,8 @@ import static functions.*
 process SAMTOOLS_FASTQ {
     tag "$meta.id"
 
-    time = 10.min
-    memory = 1.GB
+    time 10.min
+    memory 1.GB
 
     input:
     tuple val(meta), path(bam)
