@@ -55,7 +55,7 @@ process PREPARE_READS {
 process CONSENSUS {
     tag "$meta.id"
 
-    time 2.hours
+    time 120.min
     memory 8.GB
 
     errorStrategy "retry"
@@ -85,7 +85,7 @@ process CONSENSUS {
 process REALIGN {
     tag "$meta.id"
 
-    time 1.hours
+    time 60.min
     memory 1.GB
 
     input:
