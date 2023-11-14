@@ -13,6 +13,8 @@ include { JOIN_GAF as JOIN_GAF_GROUPING;
           REALIGN;
           EXTRACT_SEGMENTS } from '../../modules/scripts.nf'
 
+def GLOBBED_INPUTS = ["bam_input", "fastq_input", "prepare_reads_input", "consensus_tabular_input", "realign_input"]
+
 workflow NANOPORE_FISH {
     take:
     samples_in
@@ -36,8 +38,7 @@ workflow NANOPORE_FISH {
         if (it.get("bam_input") && it.get("fastq_input")) {
             throw new Exception("cannot specify both bam_input and fastq_input")
         }
-        def required_keys = ["basecall", "bam_input", "fastq_input", "consensus_tabular_input", "realign_input"]
-        if (!required_keys.collect { k -> it.get(k) }.any()) {
+        if (!["basecall", *GLOBBED_INPUTS].collect { k -> it.get(k) }.any()) {
             throw new Exception("one of bam_input or fastq_input required if not basecalling")
         }
         it
@@ -67,6 +68,7 @@ workflow NANOPORE_FISH {
         pod5: it.get("basecall")
         realign: it.get("realign_input")
         consensus: it.get("consensus_tabular_input")
+        prepare_reads: it.get("prepare_reads_input")
         bam: it.get("bam_input")
         fastq: it.get("fastq_input")
     }
@@ -295,6 +297,17 @@ workflow NANOPORE_FISH {
         "join_gaf_grouping_output",
         ["prepare_reads_output"],
         "_PREPARE_READS") { join_gaf_grouping_output, meta -> [join_gaf_grouping_output, meta.gfa_grouping] }
+    .set { ch_did_prepare_reads }
+    ch_did_prepare_reads.subscribe {
+        if (it.getOrDefault("publish_prepare_reads", true)) {
+            def output_dir = file_in_dir(it.output_run_dir, "prepare_reads_output")
+            output_dir.mkdirs()
+            it.prepare_reads_output.collect { output_file ->
+                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+            }
+        }
+    }
+    ch_did_prepare_reads.mix(ch_input_type.prepare_reads.map { [*:it, prepare_reads_output: it.prepare_reads_input] })
     .set { ch_prepare_reads }
     // set consensus group size based on file size?
     ch_prepare_reads.map {
@@ -439,17 +452,7 @@ workflow NANOPORE_FISH {
 workflow MAIN {
     samples_in = get_samples(params, [:], true)
     samples_in = find_inputs(samples_in, params.root, ["gfa_grouping", "gfa_variants", "gfa"])
-    samples_in = glob_inputs(samples_in,
-                                params.root,
-                                [
-                                    "pod5_input",
-                                    "bam_input",
-                                    "fastq_input",
-                                    "consensus_tabular_input",
-                                    "consensus_fasta_input",
-                                    "realign_input"
-                                ]
-                            )
+    samples_in = glob_inputs(samples_in, params.root, GLOBBED_INPUTS)
     samples = NANOPORE_FISH(samples_in)
 
     emit:
