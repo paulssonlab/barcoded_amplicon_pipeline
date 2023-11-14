@@ -36,7 +36,8 @@ workflow NANOPORE_FISH {
         if (it.get("bam_input") && it.get("fastq_input")) {
             throw new Exception("cannot specify both bam_input and fastq_input")
         }
-        if (!it.get("basecall") && !it.get("bam_input") && !it.get("fastq_input")) {
+        def required_keys = ["basecall", "bam_input", "fastq_input", "consensus_tabular_input", "realign_input"]
+        if (!required_keys.collect { k -> it.get(k) }.any()) {
             throw new Exception("one of bam_input or fastq_input required if not basecalling")
         }
         it
@@ -64,6 +65,8 @@ workflow NANOPORE_FISH {
     }
     .branch {
         pod5: it.get("basecall")
+        realign: it.get("realign_input")
+        consensus: it.get("consensus_tabular_input")
         bam: it.get("bam_input")
         fastq: it.get("fastq_input")
     }
@@ -311,11 +314,36 @@ workflow NANOPORE_FISH {
         "consensus_groups",
         ["consensus_tabular", "consensus_fasta"],
         "_CONSENSUS") { consensus_group, meta -> [meta.prepare_reads_output] }
+    .set { ch_did_consensus }
+    ch_did_consensus.subscribe {
+        if (it.get("publish_consensus")) {
+            def output_dir = file_in_dir(it.output_run_dir, "consensus")
+            output_dir.mkdirs()
+            it.consensus_tabular.collect { output_file ->
+                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+            }
+            it.consensus_fasta.collect { output_file ->
+                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+            }
+        }
+    }
+    ch_input_type.consensus.map {
+        def fasta_map = it.consensus_fasta_input.collectEntries { f -> [(f.baseName): f] }
+        def reordered_fasta = it.consensus_tabular_input.collect { f ->
+            if (!fasta_map.containsKey(f.baseName)) {
+                throw new Exception("could not find FASTA corresponding to tabular consensus input: ${f.name}")
+            }
+            fasta_map[f.baseName]
+        }
+        [*:it, consensus_tabular: it.consensus_tabular_input, consensus_fasta: reordered_fasta]
+    }
+    .set { ch_input_consensus }
+    ch_did_consensus.mix(ch_input_consensus)
     .set { ch_consensus }
     // regroup (minion: 100 consensus groups -> 10 new groups)
     // need to synchronize fasta regrouping with arrow regrouping
     ch_consensus.map {
-        def align_chunks = [it.consensus_tabular, it.consensus_fasta].transpose().collate(it.consensus_jobs_per_align_job)
+        def align_chunks = [it.consensus_tabular, it.consensus_fasta].transpose().collate(it.consensus_jobs_per_align_job.toInteger())
         def consensus_tabular = align_chunks.collect { chunks -> chunks.collect { files -> files[0] } }
         def consensus_fasta = align_chunks.collect { chunks -> chunks.collect { files -> files[1] } }
         [*:it, consensus_tabular: consensus_tabular, consensus_fasta: consensus_fasta]
@@ -363,7 +391,18 @@ workflow NANOPORE_FISH {
         "join_gaf_variants_output",
         ["realign_output"],
         "_REALIGN") { join_gaf_variants_output, meta -> [join_gaf_variants_output, meta.gfa_variants] }
-        .set { ch_realign }
+    .set { ch_did_realign }
+    ch_did_realign.subscribe {
+        if (it.get("publish_realign")) {
+            def output_dir = file_in_dir(it.output_run_dir, "realign")
+            output_dir.mkdirs()
+            it.realign_output.collect { output_file ->
+                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+            }
+        }
+    }
+    ch_did_realign.mix(ch_input_type.realign.map { [*:it, realign_output: it.realign_input] })
+    .set { ch_realign }
     // bin/join_gaf.py "*.arrow" combined.arrow
     // bin/extract_segments.py --path-col consensus_path --cigar-col realign_cg --gfa full.gfa realigned3.arrow realigned3_extracted.arrow
     map_call_process(EXTRACT_SEGMENTS,
@@ -380,10 +419,12 @@ workflow NANOPORE_FISH {
         .set { ch_extract_segments }
     // publish tabular output
     ch_extract_segments.subscribe {
-        def output_dir = file_in_dir(it.output_run_dir, "extract_segments")
-        output_dir.mkdirs()
-        it.extract_segments_output.collect { output_file ->
-            output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+        if (it.getOrDefault("publish_extract_segments", true)) {
+            def output_dir = file_in_dir(it.output_run_dir, "extract_segments")
+            output_dir.mkdirs()
+            it.extract_segments_output.collect { output_file ->
+                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+            }
         }
     }
     ch_extract_segments.mix(ch_to_align.no)
@@ -398,7 +439,17 @@ workflow NANOPORE_FISH {
 workflow MAIN {
     samples_in = get_samples(params, [:], true)
     samples_in = find_inputs(samples_in, params.root, ["gfa_grouping", "gfa_variants", "gfa"])
-    samples_in = glob_inputs(samples_in, params.root, ["fastq_input", "bam_input", "pod5_input"])
+    samples_in = glob_inputs(samples_in,
+                                params.root,
+                                [
+                                    "pod5_input",
+                                    "bam_input",
+                                    "fastq_input",
+                                    "consensus_tabular_input",
+                                    "consensus_fasta_input",
+                                    "realign_input"
+                                ]
+                            )
     samples = NANOPORE_FISH(samples_in)
 
     emit:
