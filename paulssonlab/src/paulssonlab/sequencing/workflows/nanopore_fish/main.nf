@@ -10,6 +10,8 @@ include { JOIN_GAF as JOIN_GAF_GROUPING;
           JOIN_GAF as JOIN_GAF_VARIANTS;
           PREPARE_READS;
           CONSENSUS;
+          PREPARE_CONSENSUS;
+          CONSENSUS_PREPARED;
           REALIGN;
           EXTRACT_SEGMENTS } from '../../modules/scripts.nf'
 
@@ -24,9 +26,10 @@ workflow NANOPORE_FISH {
         tabular_format: "arrow",
         graphaligner_args: "-x dbg",
         prepare_reads_args: "-x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2",
+        prepare_consensus: true,
         consensus_args: "--method spoa --no-phred-output --min-depth 3",
-        consensus_jobs: 1000,
-        consensus_jobs_per_align_job: 10,
+        consensus_jobs: 200,
+        consensus_jobs_per_align_job: 1,
         join_gaf_variants_args: "--rename-col path grouping_path --rename-col path_hash grouping_path_hash --rename-gaf-col path variants_path",
         extract_segments_args: "--path-col consensus_path --cigar-col realign_cg",
     ]
@@ -315,8 +318,38 @@ workflow NANOPORE_FISH {
     }
     .set { ch_consensus_groups }
     // bin/consensus.py "*.arrow" --output out8.arrow --fasta out8.fasta --group 8/100 --min-depth 5 --no-phred-output (??) --method-spoa
+    ch_consensus_groups.branch {
+        yes: it.get("prepare_consensus")
+        no: true
+    }
+    .set { ch_should_prepare_consensus }
+    map_call_process(PREPARE_CONSENSUS,
+        ch_should_prepare_consensus.yes,
+        ["consensus_groups", "prepare_reads_output", "prepare_consensus_args", "tabular_format"],
+        [
+            id: { consensus_group, meta -> "consensus-${consensus_group}-of-${meta.consensus_groups.size}" },
+            group: { consensus_group, meta -> "${consensus_group}/${meta.consensus_groups.size}" },
+            input_format: { consensus_group, meta -> meta.tabular_format },
+            output_format: { consensus_group, meta -> meta.tabular_format }
+        ],
+        "consensus_groups",
+        ["prepare_consensus_tabular"],
+        "_PREPARE_CONSENSUS") { consensus_group, meta -> [meta.prepare_reads_output] }
+    .set { ch_did_prepare_consensus }
+    map_call_process(CONSENSUS_PREPARED,
+        ch_did_prepare_consensus,
+        ["prepare_consensus_tabular", "consensus_args", "tabular_format"],
+        [
+            id: { prepare_consensus_tabular, meta -> prepare_consensus_tabular.baseName },
+            input_format: { prepare_consensus_tabular, meta -> meta.tabular_format },
+            output_format: { prepare_consensus_tabular, meta -> meta.tabular_format }
+        ],
+        "prepare_consensus_tabular",
+        ["consensus_tabular", "consensus_fasta"],
+        "_CONSENSUS_PREPARED") { prepare_consensus_tabular, meta -> [prepare_consensus_tabular] }
+    .set { ch_did_consensus_prepared }
     map_call_process(CONSENSUS,
-        ch_consensus_groups,
+        ch_should_prepare_consensus.no,
         ["consensus_groups", "prepare_reads_output", "consensus_args", "tabular_format"],
         [
             id: { consensus_group, meta -> "consensus-${consensus_group}-of-${meta.consensus_groups.size}" },
@@ -327,6 +360,8 @@ workflow NANOPORE_FISH {
         "consensus_groups",
         ["consensus_tabular", "consensus_fasta"],
         "_CONSENSUS") { consensus_group, meta -> [meta.prepare_reads_output] }
+    .set { ch_did_consensus_unprepared }
+    ch_did_consensus_unprepared.mix(ch_did_consensus_prepared)
     .set { ch_did_consensus }
     ch_did_consensus.subscribe {
         if (it.get("publish_consensus")) {

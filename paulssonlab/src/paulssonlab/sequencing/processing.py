@@ -173,7 +173,20 @@ def compute_depth(df):
     )
 
 
-def map_read_groups(df, func):
+def map_read_groups(df, func, max_group_size=None):
+    if max_group_size is None:
+
+        def _limit_group(expr):
+            return expr
+
+    else:
+        # prefer duplex reads, longer reads
+        def _limit_group(expr):
+            return expr.sort_by(
+                ["is_duplex", pl.col("read_seq").str.len_bytes()],
+                descending=[True, True],
+            ).head(max_group_size)
+
     return (
         df.select(
             pl.col(
@@ -191,8 +204,10 @@ def map_read_groups(df, func):
         .group_by("path")
         .agg(
             pl.map_groups(
-                pl.struct(
-                    pl.col("name", "read_seq", "read_phred", "reverse_complement")
+                _limit_group(
+                    pl.struct(
+                        pl.col("name", "read_seq", "read_phred", "reverse_complement")
+                    )
                 ),
                 func,
                 returns_scalar=True,

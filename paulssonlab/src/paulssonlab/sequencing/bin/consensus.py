@@ -26,10 +26,12 @@ def compute_consensus_seqs(
     min_depth=None,
     min_simplex_depth=None,
     min_duplex_depth=None,
+    limit_depth=None,
     method="abpoa",
     use_phreds=None,
     output_phreds=None,
     consensus_kwargs={},
+    skip_consensus=False,
 ):
     if not input_filename:
         return  # no op if given no input
@@ -50,39 +52,16 @@ def compute_consensus_seqs(
 
     start = time.time()
     with pl.StringCache():
-        dfs = []
-        hash_expr = None
-        # for f in input_filename:
-        #     if input_format == "arrow":
-        #         df = pl.scan_ipc(f, memory_map=False)
-        #     elif input_format == "parquet":
-        #         df = pl.scan_parquet(f)
-        #     if group:
-        #         if hash_expr is None:
-        #             if hash_column is not None and hash_column in df.columns:
-        #                 print("USING HASH COL")
-        #                 hash_expr = pl.col(hash_column)
-        #             else:
-        #                 hash_expr = pl.col("path").hash()
-        #         df = df.filter(hash_expr % group[1] == group[0])
-        #     df = df.select(pl.col("name", "path", "is_duplex", "read_seq", "read_phred", "reverse_complement"))
-        #     df = df.collect().lazy()
-        #     dfs.append(df)
-        # df = pl.concat(dfs)
-        # df = df.collect().lazy()
-        #######
+        # TODO: waiting on Polars to support streaming this query
         if input_format == "arrow":
             df = pl.concat([pl.scan_ipc(f) for f in input_filename])
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename])
-        # df = pl.scan_ipc(str(Path(input_filename[0]).parent / "*.arrow"), memory_map=False)
         if group:
-            if hash_expr is None:
-                if hash_column is not None and hash_column in df.columns:
-                    print("USING HASH COL")
-                    hash_expr = pl.col(hash_column)
-                else:
-                    hash_expr = pl.col("path").hash()
+            if hash_column is not None and hash_column in df.columns:
+                hash_expr = pl.col(hash_column)
+            else:
+                hash_expr = pl.col("path").hash()
             df = df.filter(hash_expr % group[1] == group[0])
         df = df.select(
             pl.col(
@@ -94,8 +73,6 @@ def compute_consensus_seqs(
                 "reverse_complement",
             )
         )
-        df = df.collect().lazy()
-        print(f"GROUP FILTER DONE {time.time() - start}")
         df = compute_depth(df)
         exprs = []
         if min_depth:
@@ -106,53 +83,35 @@ def compute_consensus_seqs(
             exprs.append(pl.col("duplex_depth") > min_duplex_depth)
         if exprs:
             df = df.filter(*exprs)
-        df = df.collect().lazy()
-        print(f"DEPTH FILTER DONE {time.time() - start}")
-        # TODO: completely lazy version
-        # waiting on Polars to support streaming this query
-        # if input_format == "arrow":
-        #     df = pl.concat([pl.scan_ipc(f) for f in input_filename])
-        # elif input_format == "parquet":
-        #     df = pl.concat([pl.scan_parquet(f) for f in input_filename])
-        # if group:
-        #     hash_expr = pl.col("path").hash()
-        #     df = df.filter(hash_expr % group[1] == group[0])
-        # df = compute_depth(df)
-        # exprs = []
-        # if min_depth:
-        #     exprs.append(pl.col("depth") > min_depth)
-        # if min_simplex_depth:
-        #     exprs.append(pl.col("simplex_depth") > min_simplex_depth)
-        # if min_duplex_depth:
-        #     exprs.append(pl.col("duplex_depth") > min_duplex_depth)
-        # if exprs:
-        #     df = df.filter(*exprs)
-        # df = map_read_groups(
-        #     df,
-        #     partial(
-        #         get_consensus_group_by,
-        #         method=method,
-        #         use_phreds=use_phreds,
-        #         return_phreds=output_phreds,
-        #         **consensus_kwargs,
-        #     ),
-        # )
+        if not skip_consensus:
+            df = map_read_groups(
+                df,
+                partial(
+                    get_consensus_group_by,
+                    method=method,
+                    use_phreds=use_phreds,
+                    return_phreds=output_phreds,
+                    **consensus_kwargs,
+                ),
+                max_group_size=limit_depth,
+            )
         # TODO: try streaming?
         df = df.collect()
         print(f"GROUP BY DONE {time.time() - start}")
-        if fasta_filename:
-            write_fastx(
-                fasta_filename,
-                df.get_column("consensus_seq"),
-                names=df.get_column("name"),
-            )
-        if fastq_filename:
-            write_fastx(
-                fastq_filename,
-                df.get_column("consensus_seq"),
-                phreds=df.get_column("consensus_phred"),
-                names=df.get_column("name"),
-            )
+        if not skip_consensus:
+            if fasta_filename:
+                write_fastx(
+                    fasta_filename,
+                    df.get_column("consensus_seq"),
+                    names=df.get_column("name"),
+                )
+            if fastq_filename:
+                write_fastx(
+                    fastq_filename,
+                    df.get_column("consensus_seq"),
+                    phreds=df.get_column("consensus_phred"),
+                    names=df.get_column("name"),
+                )
         print(f"FASTX WRITE DONE {time.time() - start}")
         if output_format == "arrow":
             df.write_ipc(output_filename)
@@ -192,10 +151,12 @@ def _parse_group(ctx, param, value):
 @click.option("--min-depth", type=int)
 @click.option("--min-simplex-depth", type=int)
 @click.option("--min-duplex-depth", type=int)
+@click.option("--limit-depth", type=int, default=50)
 @click.option("--method", type=click.Choice(["abpoa", "spoa"]), default="abpoa")
 @click.option("--phred-input/--no-phred-input", default=False)  # TODO
 @click.option("--phred-output/--no-phred-output", default=True)  # TODO
 @click.option("-p", "--param", type=(str, str), multiple=True, callback=parse_kv)
+@click.option("--skip-consensus", is_flag=True)
 @click.argument("input", type=str, nargs=-1)
 def cli(
     input,
@@ -210,10 +171,12 @@ def cli(
     min_depth,
     min_simplex_depth,
     min_duplex_depth,
+    limit_depth,
     method,
     phred_input,
     phred_output,
     param,
+    skip_consensus,
 ):
     compute_consensus_seqs(
         input,
@@ -227,10 +190,12 @@ def cli(
         min_depth,
         min_simplex_depth,
         min_duplex_depth,
+        limit_depth,
         method,
         phred_input,
         phred_output,
         param,
+        skip_consensus,
     )
 
 

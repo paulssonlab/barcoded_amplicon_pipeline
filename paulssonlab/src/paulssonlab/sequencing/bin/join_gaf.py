@@ -10,7 +10,6 @@ import pyarrow.parquet as pq
 
 sys.path.append(str(Path(__file__).parents[3]))
 from paulssonlab.sequencing.io import iter_bam_and_gaf, read_gaf
-from paulssonlab.sequencing.processing import join_dfs
 from paulssonlab.sequencing.util import detect_format
 
 
@@ -99,8 +98,8 @@ def join_reads_and_gaf(
     type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
 @click.option("--include-unaligned/--no-include-unaligned", default=True)
-@click.option("--rename-col", nargs=2)
-@click.option("--rename-gaf-col", nargs=2)
+@click.option("--rename-col", nargs=2, multiple=True)
+@click.option("--rename-gaf-col", nargs=2, multiple=True)
 @click.argument("input", type=str, nargs=-1)
 @click.argument("output", type=click.Path())
 def cli(
