@@ -41,8 +41,8 @@ def join_reads_and_gaf(
     output_format,
     gaf_filename,
     include_unaligned,
-    reads_prefix,
-    gaf_prefix,
+    rename_columns,
+    rename_gaf_columns,
 ):
     input_format = detect_format(
         input_format,
@@ -66,15 +66,12 @@ def join_reads_and_gaf(
                 reads = pl.concat([pl.scan_ipc(f) for f in input_filename])
             elif input_format == "parquet":
                 reads = pl.concat([pl.scan_parquet(f) for f in input_filename])
+            if rename_columns:
+                reads = reads.rename(rename_columns)
             gaf = pl.from_arrow(read_gaf(gaf_filename)).lazy()
-            df = join_dfs(
-                reads,
-                gaf,
-                on="name",
-                how="left",
-                left_prefix=reads_prefix,
-                right_prefix=gaf_prefix,
-            )
+            if rename_gaf_columns:
+                gaf = gaf.rename(rename_gaf_columns)
+            df = reads.join(gaf, on="name", how="left")
             table = df.collect().to_arrow()
     table = fix_dx(table)  # TODO
     if output_format == "arrow":
@@ -102,8 +99,8 @@ def join_reads_and_gaf(
     type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
 @click.option("--include-unaligned/--no-include-unaligned", default=True)
-@click.option("--reads-prefix", type=str)
-@click.option("--gaf-prefix", type=str)
+@click.option("--rename-col", nargs=2)
+@click.option("--rename-gaf-col", nargs=2)
 @click.argument("input", type=str, nargs=-1)
 @click.argument("output", type=click.Path())
 def cli(
@@ -113,8 +110,8 @@ def cli(
     output_format,
     gaf,
     include_unaligned,
-    reads_prefix,
-    gaf_prefix,
+    rename_col,
+    rename_gaf_col,
 ):
     join_reads_and_gaf(
         input,
@@ -123,8 +120,8 @@ def cli(
         output_format,
         gaf,
         include_unaligned,
-        reads_prefix,
-        gaf_prefix,
+        dict(rename_col),
+        dict(rename_gaf_col),
     )
 
 

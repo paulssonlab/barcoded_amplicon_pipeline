@@ -27,7 +27,7 @@ workflow NANOPORE_FISH {
         consensus_args: "--method spoa --no-phred-output --min-depth 3",
         consensus_jobs: 1000,
         consensus_jobs_per_align_job: 10,
-        join_gaf_variants_args: "--reads-prefix read_group_ --gaf-prefix consensus_",
+        join_gaf_variants_args: "--rename-col path grouping_path --rename-col path_hash grouping_path_hash --rename-gaf-col path variants_path",
         extract_segments_args: "--path-col consensus_path --cigar-col realign_cg",
     ]
     samples_in

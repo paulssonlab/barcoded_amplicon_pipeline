@@ -13,45 +13,6 @@ from paulssonlab.sequencing.cigar import (
 from paulssonlab.sequencing.gfa import assemble_seq_from_path, gfa_name_mapping
 
 
-# inspired by https://github.com/pola-rs/polars/issues/8205#issuecomment-1508532138
-def join_dfs(
-    left,
-    right,
-    on=None,
-    left_prefix=None,
-    left_suffix=None,
-    right_prefix=None,
-    right_suffix=None,
-    **kwargs,
-):
-    if on is None:
-        raise ValueError("must specify on")
-    if isinstance(on, str):
-        on = [on]
-    if left_prefix is None:
-        left_prefix = ""
-    if left_suffix is None:
-        left_suffix = ""
-    if right_prefix is None:
-        right_prefix = ""
-    if right_suffix is None:
-        right_suffix = ""
-    common_columns = set(left.columns) & set(right.columns) - set(on)
-    left_renamed = left.rename(
-        {
-            k: f"{left_prefix}{k}{left_suffix}" if k in common_columns else k
-            for k in left.columns
-        }
-    )
-    right_renamed = right.rename(
-        {
-            k: f"{right_prefix}{k}{right_suffix}" if k in common_columns else k
-            for k in right.columns
-        }
-    )
-    return left_renamed.join(right_renamed, on=on, **kwargs)
-
-
 def _reverse_segment(s):
     if s[0] == ">":
         return f"<{s[1:]}"
@@ -71,11 +32,12 @@ def _segments_for_normalize_path(forward_segments):
     return path_filter, reverse_segments, reverse_path_mapping
 
 
-def normalize_path(
+def normalize_paths(
     df,
     forward_segments,
     keep_unaligned=False,
     endpoints=None,
+    hash_paths=True,
 ):
     if endpoints:
         if len(endpoints) != 2:
@@ -134,6 +96,8 @@ def normalize_path(
             .alias("path")
         )
     )
+    if hash_paths:
+        df = df.with_columns(pl.col("path").hash().alias("path_hash"))
     if not keep_unaligned:
         df = df.filter(pl.col("path").is_not_null())
     if endpoints:

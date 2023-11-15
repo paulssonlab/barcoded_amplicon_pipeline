@@ -1,20 +1,27 @@
 [[params]]
-run_path = "dorado_0.4.0"
-fastq_input = "fastq_pass/*.fastq.gz"
+#run_path = "dorado_0.4.2"
+#fastq_input = "fastq_pass/*.fastq.gz"
 # pod5_input = "pod5_pass/*.pod5"
-pod5_input = "pod5_pass_split/*.pod5"
-# bam_input = "bam_test/*.bam"
+#pod5_input = "pod5_pass_split/*.pod5"
+bam_input = "bam_pass/*.bam"
 # pod5_chunk_bytes = 10737418240 # 10 GB
-# pod5_chunk_files = 100
 # pod5_split = true
 # pod5_split_by = ["channel", "mux"]
-basecall = true
+#basecall = true
 duplex = true
 # dorado_job_bytes = 10737418240 # 10 GB
 # dorado_jobs = 10
 dorado_model = "dna_r10.4.1_e8.2_400bps_sup@v4.2.0"
 dorado_duplex_model = "dna_r10.4.1_e8.2_5khz_stereo@v1.1"
-medaka_consensus_model = "r1041_e82_400bps_sup_v4.2.0"
-# TODO for testing
-#publish_pod5 = true
+publish_pod5 = true
 publish_bam = true
+publish_fastq = true
+gfa_grouping = "references/barcode.gfa"
+gfa_variants = "references/pLIB419.gfa"
+consensus_args = "--method spoa --no-phred-output --min-depth 3"
+consensus_jobs = 600
+consensus_jobs_per_align_job = 30
+consensus_tabular_input = "consensus/*.arrow"
+consensus_fasta_input = "consensus/*.fasta"
+publish_consensus = true
+publish_realign = true

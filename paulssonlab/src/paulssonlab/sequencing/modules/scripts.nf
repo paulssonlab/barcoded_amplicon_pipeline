@@ -2,7 +2,7 @@ process JOIN_GAF {
     tag "$meta.id"
 
     time 10.min
-    memory 4.GB
+    memory 8.GB
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gaf)
@@ -55,8 +55,8 @@ process PREPARE_READS {
 process CONSENSUS {
     tag "$meta.id"
 
-    time 120.min
-    memory 8.GB
+    time 4.hours
+    memory 20.GB
 
     errorStrategy "retry"
 

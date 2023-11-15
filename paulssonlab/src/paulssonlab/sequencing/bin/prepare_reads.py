@@ -15,7 +15,7 @@ from paulssonlab.sequencing.gfa import (
     filter_gfa_options,
     gfa_to_dag,
 )
-from paulssonlab.sequencing.processing import identify_usable_reads, normalize_path
+from paulssonlab.sequencing.processing import identify_usable_reads, normalize_paths
 from paulssonlab.sequencing.util import detect_format
 
 
@@ -30,6 +30,7 @@ def prepare_reads(
     exclude,
     exclude_prefix,
     keep_partial_paths,
+    hash_paths,
 ):
     input_format = detect_format(
         input_format,
@@ -53,7 +54,9 @@ def prepare_reads(
             df = pl.concat([pl.scan_ipc(f) for f in input_filename])
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename])
-        df = normalize_path(df, forward_segments, endpoints=endpoints)
+        df = normalize_paths(
+            df, forward_segments, endpoints=endpoints, hash_paths=hash_paths
+        )
         # identify_usable_reads is much faster when working on in-memory data
         df = df.collect().lazy()
         # there's no difference in doing this lazily or not,
@@ -79,9 +82,12 @@ def prepare_reads(
 )
 @filter_gfa_options
 @click.option(
-    "-p",
-    "--keep-partial-paths",
+    "--keep-partial-paths/--no-keep-partial-paths",
+    default=False,
     help="Keep alignments with paths that do not span graph end-to-end",
+)
+@click.option(
+    "--hash-paths/--no-hash-paths", default=True, help="Precompute path hashes"
 )
 @click.option("--gfa", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.argument("input", type=click.Path(exists=True, dir_okay=False), nargs=-1)
@@ -97,6 +103,7 @@ def cli(
     exclude,
     exclude_prefix,
     keep_partial_paths,
+    hash_paths,
 ):
     prepare_reads(
         gfa,
@@ -109,6 +116,7 @@ def cli(
         exclude,
         exclude_prefix,
         keep_partial_paths,
+        hash_paths,
     )
 
 

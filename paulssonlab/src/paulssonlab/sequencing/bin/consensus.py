@@ -22,6 +22,7 @@ def compute_consensus_seqs(
     input_format=None,
     output_format=None,
     group=None,
+    hash_column=None,
     min_depth=None,
     min_simplex_depth=None,
     min_duplex_depth=None,
@@ -44,13 +45,57 @@ def compute_consensus_seqs(
         )
     if not any([output_filename, fasta_filename, fastq_filename]):
         raise ValueError("at least one of --output, --fasta, --fastq must be given")
+    # TODO
+    import time
+
+    start = time.time()
     with pl.StringCache():
+        dfs = []
+        hash_expr = None
+        # for f in input_filename:
+        #     if input_format == "arrow":
+        #         df = pl.scan_ipc(f, memory_map=False)
+        #     elif input_format == "parquet":
+        #         df = pl.scan_parquet(f)
+        #     if group:
+        #         if hash_expr is None:
+        #             if hash_column is not None and hash_column in df.columns:
+        #                 print("USING HASH COL")
+        #                 hash_expr = pl.col(hash_column)
+        #             else:
+        #                 hash_expr = pl.col("path").hash()
+        #         df = df.filter(hash_expr % group[1] == group[0])
+        #     df = df.select(pl.col("name", "path", "is_duplex", "read_seq", "read_phred", "reverse_complement"))
+        #     df = df.collect().lazy()
+        #     dfs.append(df)
+        # df = pl.concat(dfs)
+        # df = df.collect().lazy()
+        #######
         if input_format == "arrow":
             df = pl.concat([pl.scan_ipc(f) for f in input_filename])
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename])
+        # df = pl.scan_ipc(str(Path(input_filename[0]).parent / "*.arrow"), memory_map=False)
         if group:
-            df = df.filter(pl.col("path").hash() % group[1] == group[0])
+            if hash_expr is None:
+                if hash_column is not None and hash_column in df.columns:
+                    print("USING HASH COL")
+                    hash_expr = pl.col(hash_column)
+                else:
+                    hash_expr = pl.col("path").hash()
+            df = df.filter(hash_expr % group[1] == group[0])
+        df = df.select(
+            pl.col(
+                "name",
+                "path",
+                "is_duplex",
+                "read_seq",
+                "read_phred",
+                "reverse_complement",
+            )
+        )
+        df = df.collect().lazy()
+        print(f"GROUP FILTER DONE {time.time() - start}")
         df = compute_depth(df)
         exprs = []
         if min_depth:
@@ -61,18 +106,40 @@ def compute_consensus_seqs(
             exprs.append(pl.col("duplex_depth") > min_duplex_depth)
         if exprs:
             df = df.filter(*exprs)
-        df = map_read_groups(
-            df,
-            partial(
-                get_consensus_group_by,
-                method=method,
-                use_phreds=use_phreds,
-                return_phreds=output_phreds,
-                **consensus_kwargs,
-            ),
-        )
+        df = df.collect().lazy()
+        print(f"DEPTH FILTER DONE {time.time() - start}")
+        # TODO: completely lazy version
+        # waiting on Polars to support streaming this query
+        # if input_format == "arrow":
+        #     df = pl.concat([pl.scan_ipc(f) for f in input_filename])
+        # elif input_format == "parquet":
+        #     df = pl.concat([pl.scan_parquet(f) for f in input_filename])
+        # if group:
+        #     hash_expr = pl.col("path").hash()
+        #     df = df.filter(hash_expr % group[1] == group[0])
+        # df = compute_depth(df)
+        # exprs = []
+        # if min_depth:
+        #     exprs.append(pl.col("depth") > min_depth)
+        # if min_simplex_depth:
+        #     exprs.append(pl.col("simplex_depth") > min_simplex_depth)
+        # if min_duplex_depth:
+        #     exprs.append(pl.col("duplex_depth") > min_duplex_depth)
+        # if exprs:
+        #     df = df.filter(*exprs)
+        # df = map_read_groups(
+        #     df,
+        #     partial(
+        #         get_consensus_group_by,
+        #         method=method,
+        #         use_phreds=use_phreds,
+        #         return_phreds=output_phreds,
+        #         **consensus_kwargs,
+        #     ),
+        # )
         # TODO: try streaming?
         df = df.collect()
+        print(f"GROUP BY DONE {time.time() - start}")
         if fasta_filename:
             write_fastx(
                 fasta_filename,
@@ -86,10 +153,12 @@ def compute_consensus_seqs(
                 phreds=df.get_column("consensus_phred"),
                 names=df.get_column("name"),
             )
+        print(f"FASTX WRITE DONE {time.time() - start}")
         if output_format == "arrow":
             df.write_ipc(output_filename)
         elif output_format == "parquet":
             df.write_parquet(output_filename)
+        print(f"TABULAR WRITE DONE {time.time() - start}")
 
 
 def _parse_group(ctx, param, value):
@@ -97,7 +166,7 @@ def _parse_group(ctx, param, value):
         try:
             assert value.count("/") == 1
             return tuple(int(num.strip()) for num in value.split("/"))
-        except:
+        except (AssertionError, ValueError):
             raise click.BadParameter("expecting --group <group_id>/<num_groups>")
     else:
         return None
@@ -118,6 +187,8 @@ def _parse_group(ctx, param, value):
     type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
 @click.option("--group", type=str, callback=_parse_group)
+@click.option("--hash-col", default="path_hash")
+@click.option("--no-hash-col", is_flag=True)
 @click.option("--min-depth", type=int)
 @click.option("--min-simplex-depth", type=int)
 @click.option("--min-duplex-depth", type=int)
@@ -134,6 +205,8 @@ def cli(
     input_format,
     output_format,
     group,
+    hash_col,
+    no_hash_col,
     min_depth,
     min_simplex_depth,
     min_duplex_depth,
@@ -150,6 +223,7 @@ def cli(
         input_format,
         output_format,
         group,
+        None if no_hash_col else hash_col,
         min_depth,
         min_simplex_depth,
         min_duplex_depth,
