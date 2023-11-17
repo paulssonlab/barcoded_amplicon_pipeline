@@ -1,8 +1,8 @@
 process GRAPHALIGNER {
     tag "$meta.id"
 
-    time 20.min
-    memory 2.GB
+    time 60.min
+    memory 1.GB
 
     input:
     tuple val(meta), path(reads), path(gfa)

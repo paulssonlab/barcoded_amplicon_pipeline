@@ -75,7 +75,7 @@ def realign(
 @click.option("--method", type=click.Choice(["parasail", "pywfa"]), default="parasail")
 @click.option("--degenerate/--no-degenerate", default=True)
 @click.option("-p", "--param", type=(str, str), multiple=True, callback=parse_kv)
-@click.option("--path-col", default="consensus_path")
+@click.option("--path-col", default="variants_path")
 @click.option("--seq-col", default="consensus_seq")
 @click.option("--score-col", default="realign_score")
 @click.option("--cigar-col", default="realign_cg")

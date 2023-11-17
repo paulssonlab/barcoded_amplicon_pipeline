@@ -1,7 +1,7 @@
 process JOIN_GAF {
     tag "$meta.id"
 
-    time 10.min
+    time 30.min
     memory 8.GB
 
     input:
@@ -28,7 +28,7 @@ process JOIN_GAF {
 process PREPARE_READS {
     tag "$meta.id"
 
-    time 10.min
+    time 20.min
     memory 12.GB
 
     input:
@@ -55,10 +55,11 @@ process PREPARE_READS {
 process PREPARE_CONSENSUS {
     tag "$meta.id"
 
-    time 4.hours
-    memory 8.GB
+    time { 120.min + 120.min * (task.attempt - 1) }
+    memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     errorStrategy "retry"
+    maxRetries 2
 
     input:
     tuple val(meta), path(input, stageAs: "input/*")
@@ -72,7 +73,7 @@ process PREPARE_CONSENSUS {
 
     script:
     """
-    ${src}/sequencing/bin/consensus.py ${meta.consensus_prepare_args ?: ""} --group ${meta.group} --input-format ${meta.input_format} --output-format ${meta.output_format} --output ${meta.id}.${meta.output_format} ${input}
+    ${src}/sequencing/bin/consensus.py --skip-consensus ${meta.prepare_consensus_args ?: ""} --group ${meta.group} --input-format ${meta.input_format} --output-format ${meta.output_format} --output ${meta.id}.${meta.output_format} ${input}
     """
 
     stub:
@@ -86,10 +87,11 @@ process PREPARE_CONSENSUS {
 process CONSENSUS_PREPARED {
     tag "$meta.id"
 
-    time 2.hours
-    memory 4.GB
+    time { 120.min + 120.min * (task.attempt - 1) }
+    memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     errorStrategy "retry"
+    maxRetries 2
 
     input:
     tuple val(meta), path(input, stageAs: "input/*")
@@ -116,10 +118,11 @@ process CONSENSUS_PREPARED {
 process CONSENSUS {
     tag "$meta.id"
 
-    time 4.hours
-    memory 8.GB
+     time { 120.min + 120.min * (task.attempt - 1) }
+    memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     errorStrategy "retry"
+    maxRetries 2
 
     input:
     tuple val(meta), path(input, stageAs: "input/*")
@@ -146,8 +149,11 @@ process CONSENSUS {
 process REALIGN {
     tag "$meta.id"
 
-    time 60.min
-    memory 1.GB
+    time { 120.min + 120.min * (task.attempt - 1) }
+    memory { 1.GB + 7.GB * (task.attempt - 1) }
+
+    errorStrategy "retry"
+    maxRetries 2
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)
@@ -173,8 +179,11 @@ process REALIGN {
 process EXTRACT_SEGMENTS {
     tag "$meta.id"
 
-    time 10.min
-    memory 1.GB
+    time { 10.min + 60.min * (task.attempt - 1) }
+    memory { 2.GB + 6.GB * (task.attempt - 1) }
+
+    errorStrategy "retry"
+    maxRetries 2
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)

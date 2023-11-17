@@ -15,7 +15,8 @@ include { JOIN_GAF as JOIN_GAF_GROUPING;
           REALIGN;
           EXTRACT_SEGMENTS } from '../../modules/scripts.nf'
 
-def GLOBBED_INPUTS = ["bam_input", "fastq_input", "prepare_reads_input", "consensus_tabular_input", "realign_input"]
+def GLOBBED_INPUTS = ["bam_input", "fastq_input", "prepare_reads_input", "prepare_consensus_input", "consensus_tabular_input", "consensus_fasta_input", "realign_input"]
+def REQUIRED_INPUTS = ["bam_input", "fastq_input", "prepare_reads_input", "prepare_consensus_input", "consensus_tabular_input", "realign_input"]
 
 workflow NANOPORE_FISH {
     take:
@@ -30,8 +31,8 @@ workflow NANOPORE_FISH {
         consensus_args: "--method spoa --no-phred-output --min-depth 3",
         consensus_jobs: 200,
         consensus_jobs_per_align_job: 1,
-        join_gaf_variants_args: "--rename-col path grouping_path --rename-col path_hash grouping_path_hash --rename-gaf-col path variants_path",
-        extract_segments_args: "--path-col consensus_path --cigar-col realign_cg",
+        join_gaf_variants_args: "--rename-col path grouping_path --rename-gaf-col path variants_path",
+        //extract_segments_args: "--path-col variants_path --cigar-col realign_cg",
     ]
     samples_in
     .map {
@@ -41,8 +42,11 @@ workflow NANOPORE_FISH {
         if (it.get("bam_input") && it.get("fastq_input")) {
             throw new Exception("cannot specify both bam_input and fastq_input")
         }
-        if (!["basecall", *GLOBBED_INPUTS].collect { k -> it.get(k) }.any()) {
-            throw new Exception("one of bam_input or fastq_input required if not basecalling")
+        if ((!it.get("consensus_tabular_input") && it.get("consensus_fasta_input")) || (it.get("consensus_tabular_input") && !it.get("consensus_fasta_input"))) {
+            throw new Exception("both consensus_tabular_input and consensus_fasta_input must be given to start pipeline from consensus step")
+        }
+        if (!["basecall", *REQUIRED_INPUTS].collect { k -> it.get(k) }.any()) {
+            throw new Exception("missing any pipeline input")
         }
         it
     }
@@ -71,6 +75,7 @@ workflow NANOPORE_FISH {
         pod5: it.get("basecall")
         realign: it.get("realign_input")
         consensus: it.get("consensus_tabular_input")
+        prepare_consensus: it.get("prepare_consensus_input")
         prepare_reads: it.get("prepare_reads_input")
         bam: it.get("bam_input")
         fastq: it.get("fastq_input")
@@ -302,8 +307,8 @@ workflow NANOPORE_FISH {
         "_PREPARE_READS") { join_gaf_grouping_output, meta -> [join_gaf_grouping_output, meta.gfa_grouping] }
     .set { ch_did_prepare_reads }
     ch_did_prepare_reads.subscribe {
-        if (it.getOrDefault("publish_prepare_reads", true)) {
-            def output_dir = file_in_dir(it.output_run_dir, "prepare_reads_output")
+        if (it.get("publish_prepare_reads")) {
+            def output_dir = file_in_dir(it.output_run_dir, "prepare_reads")
             output_dir.mkdirs()
             it.prepare_reads_output.collect { output_file ->
                 output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
@@ -333,20 +338,31 @@ workflow NANOPORE_FISH {
             output_format: { consensus_group, meta -> meta.tabular_format }
         ],
         "consensus_groups",
-        ["prepare_consensus_tabular"],
+        ["prepare_consensus_output"],
         "_PREPARE_CONSENSUS") { consensus_group, meta -> [meta.prepare_reads_output] }
     .set { ch_did_prepare_consensus }
+    ch_did_prepare_consensus.subscribe {
+        if (it.get("publish_prepare_consensus")) {
+            def output_dir = file_in_dir(it.output_run_dir, "prepare_consensus")
+            output_dir.mkdirs()
+            it.prepare_consensus_output.collect { output_file ->
+                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+            }
+        }
+    }
+    ch_did_prepare_consensus.mix(ch_input_type.prepare_consensus.map { [*:it, prepare_consensus_output: it.prepare_consensus_input] })
+    .set { ch_prepare_consensus }
     map_call_process(CONSENSUS_PREPARED,
-        ch_did_prepare_consensus,
-        ["prepare_consensus_tabular", "consensus_args", "tabular_format"],
+        ch_prepare_consensus,
+        ["prepare_consensus_output", "consensus_args", "tabular_format"],
         [
-            id: { prepare_consensus_tabular, meta -> prepare_consensus_tabular.baseName },
-            input_format: { prepare_consensus_tabular, meta -> meta.tabular_format },
-            output_format: { prepare_consensus_tabular, meta -> meta.tabular_format }
+            id: { prepare_consensus_output, meta -> prepare_consensus_output.baseName },
+            input_format: { prepare_consensus_output, meta -> meta.tabular_format },
+            output_format: { prepare_consensus_output, meta -> meta.tabular_format }
         ],
-        "prepare_consensus_tabular",
+        "prepare_consensus_output",
         ["consensus_tabular", "consensus_fasta"],
-        "_CONSENSUS_PREPARED") { prepare_consensus_tabular, meta -> [prepare_consensus_tabular] }
+        "_CONSENSUS_PREPARED") { prepare_consensus_output, meta -> [prepare_consensus_output] }
     .set { ch_did_consensus_prepared }
     map_call_process(CONSENSUS,
         ch_should_prepare_consensus.no,

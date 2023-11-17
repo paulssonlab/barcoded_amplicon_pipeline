@@ -382,11 +382,13 @@ def cut_cigar_df(
     cut_cigar_kwargs={},
 ):
     name_to_seq = gfa_name_mapping(gfa)
+    exclude_columns = []
     if path_column not in df.columns:
         raise ValueError(f"missing column {path_column}")
     if cigar_column not in df.columns:
         raise ValueError(f"missing column {cigar_column}")
-    exclude_columns = []
+    else:
+        exclude_columns.append(cigar_column)
     struct = dict(path=path_column, cigar=cigar_column)
     if sequence_column and sequence_column in df.columns:
         exclude_columns.append(sequence_column)
@@ -394,7 +396,6 @@ def cut_cigar_df(
     if phred_column and phred_column in df.columns:
         struct["phred"] = phred_column
         exclude_columns.append(phred_column)
-    exclude_columns = []
     if keep_full:
         exclude_columns = []
     dtype = _cut_cigar_dtype(

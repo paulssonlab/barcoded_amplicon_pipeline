@@ -71,7 +71,7 @@ def extract_segments(
     "--output-format",
     type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
-@click.option("--path-col", default="consensus_path")
+@click.option("--path-col", default="variants_path")
 @click.option("--no-path-col", is_flag=True)
 @click.option("--cigar-col", default="realign_cg")
 @click.option("--no-cigar-col", is_flag=True)
