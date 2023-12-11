@@ -79,7 +79,7 @@ def extract_segments(
 @click.option("--no-seq-col", is_flag=True)
 @click.option("--phred-col", default="consensus_phred")
 @click.option("--no-phred-col", is_flag=True)
-@click.option("--keep-full/--drop-full", default=False)
+@click.option("--keep-full/--no-keep-full", default=True)
 @click.option("-s", "--segments", multiple=True, callback=split_delimited_list)
 @click.option("--variant-sep", default="=")
 @click.option("--column-sep", default="|")
