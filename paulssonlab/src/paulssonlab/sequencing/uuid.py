@@ -1,6 +1,8 @@
 import numba
 import numpy as np
 
+IDXS_WITHOUT_HYPHENS = list(set(range(36)) - set([8, 13, 18, 23]))
+
 hex_to_nibble = np.zeros(256, dtype=np.uint8)
 for char in range(ord("0"), ord("9") + 1):
     hex_to_nibble[char] = char - ord("0")
@@ -8,6 +10,10 @@ for char in range(ord("a"), ord("f") + 1):
     hex_to_nibble[char] = char - ord("a") + 10
 for char in range(ord("A"), ord("F") + 1):
     hex_to_nibble[char] = char - ord("A") + 10
+
+
+def remove_hyphens(ary):
+    return ary[:, IDXS_WITHOUT_HYPHENS]
 
 
 @numba.njit(nogil=True)
