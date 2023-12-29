@@ -51,6 +51,11 @@ process DORADO_DUPLEX {
 
 process DORADO_BASECALLER {
     tag "$meta.id"
+    label "dorado_gpu"
+    cpus 2 // TODO: useful?
+    time 90.min // TODO: adjust based on total input file size
+    memory 38.GB
+    errorStrategy "retry"
 
     input:
     tuple val(meta), path("pod5/?.pod5"), path(dorado_model)
@@ -63,9 +68,13 @@ process DORADO_BASECALLER {
 
     script:
     """
-    # TODO
     module load gcc/9.2.0
     module load cuda/11.7
+    # TODO
+    echo -n "HOSTNAME: "
+    hostname -a
+    echo -n "GPU: "
+    nvidia-smi --query-gpu=name --format=csv,noheader
     dorado basecaller ${meta.dorado_basecaller_args ?: ""} ${dorado_model} pod5 > ${meta.id}.bam
     """
 }

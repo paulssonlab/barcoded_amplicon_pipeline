@@ -15,7 +15,7 @@ include { JOIN_GAF as JOIN_GAF_GROUPING;
           REALIGN;
           EXTRACT_SEGMENTS } from '../../modules/scripts.nf'
 
-def GLOBBED_INPUTS = ["bam_input", "fastq_input", "prepare_reads_input", "prepare_consensus_input", "consensus_tabular_input", "consensus_fasta_input", "realign_input"]
+def GLOBBED_INPUTS = ["pod5_input", "bam_input", "fastq_input", "prepare_reads_input", "prepare_consensus_input", "consensus_tabular_input", "consensus_fasta_input", "realign_input"]
 def REQUIRED_INPUTS = ["bam_input", "fastq_input", "prepare_reads_input", "prepare_consensus_input", "consensus_tabular_input", "realign_input"]
 
 workflow NANOPORE_FISH {
@@ -37,7 +37,7 @@ workflow NANOPORE_FISH {
     samples_in
     .map {
         if (it.get("basecall") && !it.get("pod5_input")) {
-            throw new Exception("pod5_input must be specified to basecall")
+            throw new Exception("basecalling requires pod5 input")
         }
         if (it.get("bam_input") && it.get("fastq_input")) {
             throw new Exception("cannot specify both bam_input and fastq_input")
