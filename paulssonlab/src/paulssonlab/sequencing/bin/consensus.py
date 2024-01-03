@@ -47,10 +47,6 @@ def compute_consensus_seqs(
         )
     if not any([output_filename, fasta_filename, fastq_filename]):
         raise ValueError("at least one of --output, --fasta, --fastq must be given")
-    # TODO
-    import time
-
-    start = time.time()
     with pl.StringCache():
         # TODO: waiting on Polars to support streaming this query
         if input_format == "arrow":
@@ -97,7 +93,6 @@ def compute_consensus_seqs(
             )
         # TODO: try streaming?
         df = df.collect()
-        print(f"GROUP BY DONE {time.time() - start}")
         if not skip_consensus:
             if fasta_filename:
                 write_fastx(
@@ -112,12 +107,10 @@ def compute_consensus_seqs(
                     phreds=df.get_column("consensus_phred"),
                     names=df.get_column("name"),
                 )
-        print(f"FASTX WRITE DONE {time.time() - start}")
         if output_format == "arrow":
             df.write_ipc(output_filename)
         elif output_format == "parquet":
             df.write_parquet(output_filename)
-        print(f"TABULAR WRITE DONE {time.time() - start}")
 
 
 def _parse_group(ctx, param, value):
