@@ -36,11 +36,25 @@ SAM_TAG_REGEX = re.compile(
 )
 DEFAULT_BAM_COLUMNS = {"read_seq": pa.string(), "read_phred": pa.list_(pa.uint8())}
 DEFAULT_BAM_TAGS = {
+    "RG": pa.dictionary(pa.uint8(), pa.string()),
     "qs": pa.uint8(),
-    "dx": pa.int8(),
-    "ch": pa.uint16(),
+    # "ns": pa.int64(),
+    # "ts": pa.int64(),
     "mx": pa.uint8(),
+    "ch": pa.uint16(),
+    # "rn": pa.uint32(),
+    "st": pa.string(),
+    "du": pa.float32(),
+    "fn": pa.dictionary(pa.uint8(), pa.string()),
+    # "sm": pa.float32(),
+    # "sf": pa.float32(),
+    # "sv": pa.dictionary(pa.uint8(), pa.string()),
+    # "mv": ???,
+    "dx": pa.int8(),
     "pi": pa.string(),
+    # "sp": pa.int64(),
+    # "pt": pa.int64(),
+    # "MN": pa.int64(),
 }
 
 
@@ -175,8 +189,8 @@ def iter_bam_and_gaf(
         columns = dict(zip(batch.column_names, batch.columns))
         for col_name, col_type in bam_types.items():
             columns[col_name] = pa.array(bam_columns[col_name], col_type)
-            batch = pa.RecordBatch.from_pydict(columns)
-        yield batch
+        new_batch = pa.RecordBatch.from_pydict(columns)
+        yield new_batch
     if batch is None:
         raise ValueError("GAF cannot be empty")
     if include_unaligned:
@@ -214,8 +228,8 @@ def iter_bam_and_gaf(
                         columns[col_name] = pa.array(bam_columns[col_name], col_type)
                     else:
                         columns[col_name] = pa.nulls(num_reads, col_type)
-                batch = pa.RecordBatch.from_pydict(columns)
-                yield batch
+                new_batch = pa.RecordBatch.from_pydict(columns)
+                yield new_batch
                 # start new batch
                 bam_columns = None
                 num_reads = 0

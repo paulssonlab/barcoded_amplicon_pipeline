@@ -2,6 +2,9 @@ from collections import defaultdict
 from functools import partial
 
 import polars as pl
+import pyarrow as pa
+import pyarrow.compute as pc
+from cytoolz import dissoc
 
 from paulssonlab.sequencing.align import pairwise_align
 from paulssonlab.sequencing.cigar import (
@@ -11,6 +14,7 @@ from paulssonlab.sequencing.cigar import (
     decode_cigar,
 )
 from paulssonlab.sequencing.gfa import assemble_seq_from_path, gfa_name_mapping
+from paulssonlab.sequencing.io import iter_bam_and_gaf
 
 
 def _reverse_segment(s):
@@ -171,6 +175,85 @@ def compute_depth(df):
     ).with_columns(
         (pl.col("depth") - pl.col("duplex_depth")).alias("simplex_depth"),
     )
+
+
+def load_pairing_data(bam_filename, gaf_filename):
+    batches = []
+    for batch in iter_bam_and_gaf(bam_filename, gaf_filename, include_unaligned=False):
+        # TODO: could do this processing more cleanly in polars
+        # but wasn't sure how to do pl.LazyFrame computations on an iterator of RecordBatches
+        batch = batch.select(
+            ["name", "read_seq", "path", "qs", "mx", "ch", "st", "du", "pi"]
+        )
+        schema = batch.schema
+        schema = schema.remove(schema.get_field_index("read_seq"))
+        schema = schema.set(
+            schema.names.index("st"), pa.field("st", pa.timestamp("ms", "UTC"))
+        )
+        schema = schema.append(pa.field("read_len", pa.uint32()))
+        batch = pa.RecordBatch.from_pydict(
+            {
+                **dissoc(batch.to_pydict(), "read_seq"),
+                "st": batch.column("st").cast(pa.timestamp("ms", "UTC")),
+                "read_len": pc.binary_length(batch.column("read_seq")),
+            },
+            schema=schema,
+        )
+        batches.append(batch)
+    return pl.from_arrow(batches)
+
+
+def find_duplex_pairs(df, forward_segments, endpoints=None):
+    (
+        path_filter,
+        _,
+        reverse_path_mapping,
+    ) = _segments_for_normalize_path(forward_segments)
+    df = (
+        df.rename({"path": "full_path"})
+        # .is_first_distinct() picks better (primary) alignment instead of alternate alignment
+        # if input is in GAF order
+        # .filter(pl.col("name").is_first_distinct())
+        # TODO: polars bug, is_first_distinct() returns empty dataframe
+        # when used in a more complicated lazy query,
+        # exact cause unknown
+        .filter(pl.col("name").is_first_distinct())
+        .with_columns(
+            pl.col("full_path")
+            .list.set_intersection(path_filter)
+            # TODO: waiting on https://github.com/pola-rs/polars/issues/11735
+            # to keep path columns as categorical
+            .cast(pl.List(pl.Categorical))
+            .alias("_path"),
+        )
+        .with_columns(
+            pl.col("_path")
+            .list.reverse()
+            .list.eval(pl.element().replace(reverse_path_mapping, default=None))
+            .alias("_path_reversed"),
+        )
+    )
+    if endpoints:
+        df = df.filter(
+            (pl.col("_path").list.set_intersection(endpoints[0]).list.len() > 0)
+            & (pl.col("_path").list.set_intersection(endpoints[1]).list.len() > 0)
+        )
+    df_sorted = df.sort("st")
+    df_endtime = df.with_columns(
+        (pl.col("st") + pl.duration(seconds="du")).alias("_endtime")
+    ).sort("_endtime")
+    df_joined = df_endtime.join_asof(
+        df_sorted,
+        left_on="_endtime",
+        right_on="st",
+        by=["ch", "mx"],
+        strategy="forward",
+        tolerance="10s",
+    ).filter(
+        (pl.col("_path") == pl.col("_path_reversed_right"))
+        & pl.col("name_right").is_not_null()
+    )
+    return df_joined
 
 
 def map_read_groups(df, func, max_group_size=None):
