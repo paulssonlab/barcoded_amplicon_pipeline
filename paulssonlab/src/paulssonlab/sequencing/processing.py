@@ -196,7 +196,7 @@ def load_pairing_data(bam_filename, gaf_filename):
     return pl.from_arrow(batches)
 
 
-def find_duplex_pairs(df, forward_segments, endpoints=None):
+def find_duplex_pairs(df, timedelta, forward_segments, endpoints=None):
     (
         path_filter,
         _,
@@ -241,7 +241,7 @@ def find_duplex_pairs(df, forward_segments, endpoints=None):
         right_on="st",
         by=["ch", "mx"],
         strategy="forward",
-        tolerance="10s",
+        tolerance=timedelta,
     ).filter(
         (pl.col("_path") == pl.col("_path_reversed_right"))
         & pl.col("name_right").is_not_null()

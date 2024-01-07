@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import sys
+from datetime import timedelta as _timedelta
 from pathlib import Path
 
 import click
@@ -30,7 +31,11 @@ def find_duplex_pairs(
     exclude,
     exclude_prefix,
     end_to_end,
+    max_time_delta,
+    min_qscore,
 ):
+    if not max_time_delta:
+        raise ValueError("max_time_delta must be positive (seconds)")
     gfa = gfapy.Gfa.from_file(gfa_filename)
     gfa = filter_gfa(gfa, include, include_prefix, exclude, exclude_prefix)
     graph = gfa_to_dag(gfa)
@@ -46,8 +51,11 @@ def find_duplex_pairs(
         # there's no difference in doing this lazily or not,
         # so I'm arbitrarily choosing to do it lazily
         df = df.lazy()
+        if min_qscore:
+            df = df.filter(pl.col("qs") >= min_qscore)
         df = _find_duplex_pairs(
             df,
+            _timedelta(seconds=max_time_delta),
             forward_segments,
             endpoints=endpoints,
         )
@@ -63,6 +71,9 @@ def find_duplex_pairs(
     default=True,
     help="Only use alignments with paths that span graph end-to-end",
 )
+@click.option("--max-time-delta", type=float, default=3)
+@click.option("--min-qscore", type=int, default=8)
+@click.option("--no-min-qscore", is_flag=True)
 @click.option("--gfa", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option("--gaf", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.argument("bam", type=click.Path(exists=True, dir_okay=False))
@@ -77,6 +88,9 @@ def cli(
     exclude,
     exclude_prefix,
     end_to_end,
+    max_time_delta,
+    min_qscore,
+    no_min_qscore,
 ):
     find_duplex_pairs(
         gfa,
@@ -88,6 +102,8 @@ def cli(
         exclude,
         exclude_prefix,
         end_to_end,
+        max_time_delta,
+        None if no_min_qscore else min_qscore,
     )
 
 
