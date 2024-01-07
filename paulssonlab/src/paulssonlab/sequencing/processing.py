@@ -3,8 +3,6 @@ from functools import partial
 
 import polars as pl
 import pyarrow as pa
-import pyarrow.compute as pc
-from cytoolz import dissoc
 
 from paulssonlab.sequencing.align import pairwise_align
 from paulssonlab.sequencing.cigar import (
@@ -182,20 +180,15 @@ def load_pairing_data(bam_filename, gaf_filename):
     for batch in iter_bam_and_gaf(bam_filename, gaf_filename, include_unaligned=False):
         # TODO: could do this processing more cleanly in polars
         # but wasn't sure how to do pl.LazyFrame computations on an iterator of RecordBatches
-        batch = batch.select(
-            ["name", "read_seq", "path", "qs", "mx", "ch", "st", "du", "pi"]
-        )
+        batch = batch.select(["name", "path", "qs", "mx", "ch", "st", "du", "pi"])
         schema = batch.schema
-        schema = schema.remove(schema.get_field_index("read_seq"))
         schema = schema.set(
             schema.names.index("st"), pa.field("st", pa.timestamp("ms", "UTC"))
         )
-        schema = schema.append(pa.field("read_len", pa.uint32()))
         batch = pa.RecordBatch.from_pydict(
             {
-                **dissoc(batch.to_pydict(), "read_seq"),
+                **batch.to_pydict(),
                 "st": batch.column("st").cast(pa.timestamp("ms", "UTC")),
-                "read_len": pc.binary_length(batch.column("read_seq")),
             },
             schema=schema,
         )
