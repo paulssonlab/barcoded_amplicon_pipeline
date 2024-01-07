@@ -29,7 +29,7 @@ def prepare_reads(
     include_prefix,
     exclude,
     exclude_prefix,
-    keep_partial_paths,
+    end_to_end,
     hash_paths,
 ):
     input_format = detect_format(
@@ -45,10 +45,10 @@ def prepare_reads(
     # weakly_connected_components is a generator, so only compute once
     wccs = list(nx.weakly_connected_components(graph))
     forward_segments = dag_forward_segments(graph, wccs=wccs)
-    if keep_partial_paths:
-        endpoints = None
-    else:
+    if end_to_end:
         endpoints = dag_endpoints(graph, wccs=wccs)
+    else:
+        endpoints = None
     with pl.StringCache():
         if input_format == "arrow":
             df = pl.concat([pl.scan_ipc(f) for f in input_filename])
@@ -82,9 +82,9 @@ def prepare_reads(
 )
 @filter_gfa_options
 @click.option(
-    "--keep-partial-paths/--no-keep-partial-paths",
-    default=False,
-    help="Keep alignments with paths that do not span graph end-to-end",
+    "--end-to-end/--no-end-to-end",
+    default=True,
+    help="Only use alignments with paths that span graph end-to-end",
 )
 @click.option(
     "--hash-paths/--no-hash-paths", default=True, help="Precompute path hashes"
@@ -102,7 +102,7 @@ def cli(
     include_prefix,
     exclude,
     exclude_prefix,
-    keep_partial_paths,
+    end_to_end,
     hash_paths,
 ):
     prepare_reads(
@@ -115,7 +115,7 @@ def cli(
         include_prefix,
         exclude,
         exclude_prefix,
-        keep_partial_paths,
+        end_to_end,
         hash_paths,
     )
 
