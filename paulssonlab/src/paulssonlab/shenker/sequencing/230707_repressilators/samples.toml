@@ -27,3 +27,4 @@ consensus_tabular_input = "consensus/*.arrow"
 consensus_fasta_input = "consensus/*.fasta"
 publish_consensus = true
 publish_realign = true
+output = "consensus"
