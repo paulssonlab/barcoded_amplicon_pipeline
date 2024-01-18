@@ -16,6 +16,11 @@ process POD5_MERGE {
     """
     pod5 merge ${meta.pod5_merge_args ?: ""} -o ${meta.id}.pod5 pod5
     """
+
+    stub:
+    """
+    touch ${meta.id}.pod5
+    """
 }
 
 process POD5_VIEW {
@@ -33,6 +38,11 @@ process POD5_VIEW {
     script:
     """
     pod5 view -t ${task.cpus} ${meta.pod5_view_args ?: ""} -o view.tsv pod5
+    """
+
+    stub:
+    """
+    touch view.tsv
     """
 }
 
@@ -57,6 +67,12 @@ process POD5_VIEW_AND_SUBSET {
     pod5 view -t ${task.cpus} ${meta.pod5_view_args ?: ""} -o view.tsv pod5
     pod5 subset -t ${task.cpus} ${meta.pod5_subset_args ?: ""} -s view.tsv -o subset pod5
     """
+
+    stub:
+    """
+    mkdir subset
+    touch subset/channel-1.pod5
+    """
 }
 
 process POD5_FILTER {
@@ -77,6 +93,11 @@ process POD5_FILTER {
     """
     pod5 filter -t ${task.cpus} ${meta.pod5_filter_args ?: ""} -i ${read_ids} -o ${meta.id}.pod5 pod5
     """
+
+    stub:
+    """
+    touch ${meta.id}.pod5
+    """
 }
 
 process SPLIT_READ_IDS {
@@ -93,6 +114,12 @@ process SPLIT_READ_IDS {
 
     script:
     """
-    ${System.env['src']}/sequencing/bin/split_read_ids.py ${meta.split_read_ids_args ?: ""} ${tsv} read_lists
+    ${src}/sequencing/bin/split_read_ids.py ${meta.split_read_ids_args ?: ""} ${tsv} read_lists
+    """
+
+    stub:
+    """
+    mkdir read_lists
+    touch read_lists/channel-1.tsv
     """
 }

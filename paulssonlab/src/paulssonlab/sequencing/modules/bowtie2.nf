@@ -17,6 +17,12 @@ process BOWTIE2_BUILD {
     mkdir bowtie2
     bowtie2-build --threads ${task.cpus} ${meta.bowtie2_build_args ?: ""} ${fasta} bowtie2/${fasta.baseName}
     """
+
+    stub:
+    """
+    mkdir bowtie2
+    touch bowtie2/foo
+    """
 }
 
 def call_BOWTIE2_BUILD(ch) {
@@ -53,6 +59,12 @@ process BOWTIE2_ALIGN {
         ${bowtie2_align_args} \\
         -x \$INDEX --interleaved ${reads} \\
         | samtools ${samtools_command} --threads ${task.cpus} -o ${meta.id}.bam -) 2> ${meta.id}.bowtie2.log
+    """
+
+    stub:
+    """
+    touch ${meta.id}.bam
+    touch ${meta.id}.bowtie2.log
     """
 }
 

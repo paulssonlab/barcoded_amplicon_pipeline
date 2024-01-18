@@ -35,6 +35,11 @@ process CHOPPER {
     """
     gunzip -c ${reads} | chopper --threads ${task.cpus} ${chopper_args} | gzip > filtered.fastq.gz
     """
+
+    stub:
+    """
+    touch filtered.fastq.gz
+    """
 }
 
 def call_CHOPPER(ch) {

@@ -1,3 +1,30 @@
+process FIND_DUPLEX_PAIRS {
+    tag "$meta.id"
+
+    time 10.min
+    memory 4.GB
+
+    input:
+    tuple val(meta), path(gfa), path(bam), path(gaf)
+
+    output:
+    tuple val(meta), path("${meta.id}_pairs.csv")
+
+    // TODO
+    conda "/home/jqs1/micromamba/envs/medaka"
+    // conda "${params.conda_env_dir}/scripts.yml"
+
+    script:
+    """
+    ${src}/sequencing/bin/find_duplex_reads.py ${meta.find_duplex_reads_args ?: ""} --gfa ${gfa} --gaf ${gaf} ${bam} ${meta.id}_pairs.csv
+    """
+
+    stub:
+    """
+    touch ${meta.id}_pairs.csv
+    """
+}
+
 process JOIN_GAF {
     tag "$meta.id"
 

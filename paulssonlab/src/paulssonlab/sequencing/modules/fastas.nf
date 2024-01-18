@@ -61,6 +61,13 @@ process EXTRACT_CONSENSUS {
     (cat ${fasta} | seqkit replace -p '^(\\S+).*' -r '\$1' \
      | seqkit split - --by-id -f -O consensus) 2> extract_consensus.log
     """
+
+    stub:
+    """
+    mkdir consensus
+    touch consensus/foo.fa
+    touch extract_consensus.log
+    """
 }
 
 def call_EXTRACT_CONSENSUS(ch) {

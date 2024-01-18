@@ -3,10 +3,17 @@ import static functions.*
 include { POD5_MERGE; POD5_MERGE as POD5_MERGE2; POD5_VIEW_AND_SUBSET } from '../../modules/pod5.nf'
 include { DORADO_DOWNLOAD;
           DORADO_DOWNLOAD as DORADO_DOWNLOAD2;
-          DORADO_DUPLEX; DORADO_BASECALLER } from '../../modules/dorado.nf'
-include { SAMTOOLS_FASTQ } from '../../modules/samtools.nf'
-include { GRAPHALIGNER as GRAPHALIGNER_GROUPING; GRAPHALIGNER as GRAPHALIGNER_VARIANTS } from '../../modules/graphaligner.nf'
-include { JOIN_GAF as JOIN_GAF_GROUPING;
+          DORADO_BASECALLER;
+          DORADO_DUPLEX;
+          DORADO_DUPLEX_WITH_PAIRS } from '../../modules/dorado.nf'
+include { SAMTOOLS_FASTQ;
+          SAMTOOLS_FASTQ as SAMTOOLS_FASTQ_DUPLEX;
+          SAMTOOLS_MERGE } from '../../modules/samtools.nf'
+include { GRAPHALIGNER as GRAPHALIGNER_GROUPING;
+          GRAPHALIGNER as GRAPHALIGNER_GROUPING_DUPLEX;
+          GRAPHALIGNER as GRAPHALIGNER_VARIANTS } from '../../modules/graphaligner.nf'
+include { FIND_DUPLEX_PAIRS;
+          JOIN_GAF as JOIN_GAF_GROUPING;
           JOIN_GAF as JOIN_GAF_VARIANTS;
           PREPARE_READS;
           CONSENSUS;
@@ -14,6 +21,8 @@ include { JOIN_GAF as JOIN_GAF_GROUPING;
           CONSENSUS_PREPARED;
           REALIGN;
           EXTRACT_SEGMENTS } from '../../modules/scripts.nf'
+include { CAT as CAT_DUPLEX_GAF;
+          CAT as CAT_DUPLEX_FASTQ } from '../../modules/util.nf'
 
 def GLOBBED_INPUTS = ["pod5_input", "bam_input", "fastq_input", "prepare_reads_input", "prepare_consensus_input", "consensus_tabular_input", "consensus_fasta_input", "realign_input"]
 def REQUIRED_INPUTS = ["bam_input", "fastq_input", "prepare_reads_input", "prepare_consensus_input", "consensus_tabular_input", "realign_input"]
@@ -24,8 +33,10 @@ workflow NANOPORE_FISH {
 
     main:
     def DEFAULT_ARGS = [
+        samtools_merge_args: "-c",
         tabular_format: "arrow",
         graphaligner_args: "-x dbg",
+        find_duplex_pairs_args: "-x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2",
         prepare_reads_args: "-x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2",
         prepare_consensus: true,
         consensus_args: "--method spoa --no-phred-output --min-depth 3",
@@ -201,40 +212,48 @@ workflow NANOPORE_FISH {
             yes: !(it.containsKey("duplex") && !it["duplex"])
             no: true
         }
-    .set { ch_do_duplex }
+    .set { ch_do_download_duplex }
     call_process(DORADO_DOWNLOAD2,
-        ch_do_duplex.yes,
+        ch_do_download_duplex.yes,
         ["dorado_duplex_model", "dorado_download_args"],
         [id: { it.dorado_duplex_model }],
         ["dorado_duplex_model_dir"]) { meta -> [meta.dorado_duplex_model] }
-    .set { ch_dorado_duplex_model }
+    .set { ch_did_download_duplex }
+    ch_did_download_duplex.branch {
+        yes: !(it.containsKey("duplex") && !it["duplex"]) && it.getOrDefault("use_dorado_duplex_pairing", false)
+        no: true
+    }
+    .set { ch_do_dorado_duplex }
     map_call_process(DORADO_DUPLEX,
-        ch_dorado_duplex_model,
+        ch_do_dorado_duplex.yes,
         ["pod5", "dorado_model_dir", "dorado_duplex_model_dir", "dorado_duplex_args"],
         [id: { pod5, meta -> exemplar(pod5).baseName }],
         "pod5",
         ["bam"],
         "_DORADO_DUPLEX") { pod5, meta -> [pod5, meta.dorado_model_dir, meta.dorado_duplex_model_dir] }
-    .set { ch_dorado_duplex }
+    .set { ch_did_dorado_duplex }
+    ch_do_download_duplex.no.mix(ch_do_dorado_duplex.no)
+    .set { ch_do_dorado_simplex }
     map_call_process(DORADO_BASECALLER,
-        ch_do_duplex.no,
+        ch_do_dorado_simplex,
         ["pod5", "dorado_model_dir", "dorado_basecaller_args"],
         [id: { pod5, meta -> exemplar(pod5).baseName }],
         "pod5",
         ["bam"],
         "_DORADO_BASECALLER") { pod5, meta -> [pod5, meta.dorado_model_dir] }
-    .set { ch_dorado_basecaller }
-    ch_dorado_basecaller.mix(ch_dorado_duplex)
+    .set { ch_did_dorado_simplex }
+    ch_did_dorado_simplex.mix(ch_did_dorado_duplex)
     .set { ch_basecalled }
-    ch_basecalled.subscribe {
-        if (it.get("publish_bam")) {
-            def output_dir = file_in_dir(it.output_run_dir, "bam")
-            output_dir.mkdirs()
-            it.bam.collect { output_file ->
-                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
-            }
-        }
-    }
+    // publish bam TODO
+    // ch_basecalled.subscribe {
+    //     if (it.get("publish_bam")) {
+    //         def output_dir = file_in_dir(it.output_run_dir, "bam")
+    //         output_dir.mkdirs()
+    //         it.bam.collect { output_file ->
+    //             output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+    //         }
+    //     }
+    // }
     ch_basecalled.mix(ch_input_type.bam.map { [*:it, bam: it.bam_input] } )
     .set { ch_bam }
     // use samtools to convert sam to fastq.gz
@@ -246,16 +265,16 @@ workflow NANOPORE_FISH {
         ["fastq"],
         "_SAMTOOLS_FASTQ") { bam, meta -> [bam] }
     .set { ch_converted_to_fastq }
-    // publish fastq
-    ch_converted_to_fastq.subscribe {
-        if (it.get("publish_fastq")) {
-            def output_dir = file_in_dir(it.output_run_dir, "fastq")
-            output_dir.mkdirs()
-            it.fastq.collect { output_file ->
-                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
-            }
-        }
-    }
+    // publish fastq TODO
+    // ch_converted_to_fastq.subscribe {
+    //     if (it.get("publish_fastq")) {
+    //         def output_dir = file_in_dir(it.output_run_dir, "fastq")
+    //         output_dir.mkdirs()
+    //         it.fastq.collect { output_file ->
+    //             output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+    //         }
+    //     }
+    // }
     ch_converted_to_fastq.mix(ch_input_type.fastq.map { [*:it, fastq: it.fastq_input] })
     .set { ch_fastq }
     ch_fastq.branch {
@@ -263,7 +282,7 @@ workflow NANOPORE_FISH {
         no: true
     }
     .set { ch_to_align }
-    // // GraphAligner -t 1 -x dbg -g barcode.gfa -f in.fastq.gz -a out.gaf
+    // GraphAligner -t 1 -x dbg -g barcode.gfa -f in.fastq.gz -a out.gaf
     with_keys(ch_to_align.yes, [graphaligner_args: { it.graphaligner_grouping_args }]) {
         map_call_process(GRAPHALIGNER_GROUPING,
             it,
@@ -273,10 +292,133 @@ workflow NANOPORE_FISH {
             ["gaf_grouping"],
             "_GRAPHALIGNER_GROUPING") { fastq, meta -> [fastq, meta.gfa_grouping] }
     }
-    .map {
+    .set { ch_did_graphaligner_grouping }
+    ch_did_graphaligner_grouping.map {
         // bam, gaf -> [(bam, gaf), ...]
         [*:it, bam_and_gaf: [it.bam, it.gaf_grouping].transpose()]
     }
+    .set { ch_bam_and_gaf }
+    ch_bam_and_gaf.branch {
+        yes: !(it.containsKey("duplex") && !it["duplex"]) && !it.getOrDefault("use_dorado_duplex_pairing", false)
+        no: true
+    }
+    .set { ch_do_nondorado_duplex_pairing }
+    // start of use_dorado_duplex_pairing = false
+    // find_duplex_pairs.py --gfa ../references/barcode.gfa --gaf channel-1_merged.gaf -x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2 channel-1_merged.bam channel-1_merged_pairs.csv
+    map_call_process(FIND_DUPLEX_PAIRS,
+        ch_do_nondorado_duplex_pairing.yes,
+        ["bam_and_gaf", "gfa_grouping", "find_duplex_pairs_args"],
+        [id: { bam_and_gaf, meta -> bam_and_gaf[0].baseName }],
+        "bam_and_gaf",
+        ["duplex_pairs"],
+        "_FIND_DUPLEX_PAIRS") { bam_and_gaf, meta -> [meta.gfa_grouping, bam_and_gaf[0], bam_and_gaf[1]] }
+    .set { ch_did_find_duplex_pairs }
+    ch_did_find_duplex_pairs.map {
+        [*:it, pod5_and_pairs: [it.pod5, it.duplex_pairs].transpose()]
+    }
+    .set { ch_pod5_and_pairs }
+    // dorado duplex --pairs channel-1_merged_pairs.csv simplex_model pod5
+    map_call_process(DORADO_DUPLEX_WITH_PAIRS,
+        ch_pod5_and_pairs,
+        ["pod5_and_pairs", "dorado_model_dir", "dorado_duplex_model_dir", "dorado_duplex_args"],
+        [id: { pod5_and_pairs, meta -> pod5_and_pairs[0].baseName }],
+        "pod5_and_pairs",
+        ["bam_duplex"],
+        "_DORADO_DUPLEX_WITH_PAIRS") { pod5_and_pairs, meta -> [pod5_and_pairs[0], pod5_and_pairs[1], meta.dorado_model_dir, meta.dorado_duplex_model_dir] }
+    .set { ch_did_dorado_duplex }
+    // samtools merge -@ ${task.cpus} -c bam/channel-1_merged.bam bam/channel-1_merged_duplex.bam channel-1_merged.bam
+    ch_did_dorado_duplex.map {
+        [
+            *:it,
+            bam_simplex: it.bam,
+            bam_to_combine: [it.bam_duplex, it.bam].transpose()
+        ]
+    }
+    .set { ch_bam_to_combine }
+    map_call_process(SAMTOOLS_MERGE,
+        ch_bam_to_combine,
+        ["bam_to_combine", "samtools_merge_args"],
+        [id: { bam_to_combine, meta -> bam_to_combine[1].baseName }],
+        "bam_to_combine",
+        ["bam"],
+        "_SAMTOOLS_MERGE") { bam_to_combine, meta -> [bam_to_combine] }
+    .set { ch_bam_combined }
+    // publish bam
+    ch_bam_combined.subscribe {
+        if (it.get("publish_bam")) {
+            def output_dir = file_in_dir(it.output_run_dir, "bam")
+            output_dir.mkdirs()
+            it.bam.collect { output_file ->
+                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+            }
+        }
+    }
+    // use samtools to convert sam to fastq.gz
+    map_call_process(SAMTOOLS_FASTQ_DUPLEX,
+        ch_bam_combined,
+        ["bam_duplex", "samtools_fastq_args"],
+        [id: { bam, meta -> bam.baseName }],
+        "bam_duplex",
+        ["fastq_duplex"],
+        "_SAMTOOLS_FASTQ_DUPLEX") { bam, meta -> [bam] }
+    .set { ch_duplex_converted_to_fastq }
+    ch_duplex_converted_to_fastq.map {
+        [
+            *:it,
+            fastq_simplex: it.fastq,
+            fastq_to_combine: [it.fastq_duplex, it.fastq].transpose()
+        ]
+    }
+    .set { ch_fastq_to_combine }
+    // cat fastq/channel-1_merged_duplex.fastq.gz fastq/channel-1_merged.fastq.gz > channel-1_merged.fastq.gz
+    map_call_process(CAT_DUPLEX_FASTQ,
+        ch_fastq_to_combine,
+        ["fastq_to_combine"],
+        [id: { fastq_to_combine, meta -> fastq_to_combine[1].baseName }],
+        "fastq_to_combine",
+        ["fastq"],
+        "_CAT_DUPLEX_FASTQ") { fastq_to_combine, meta -> [fastq_to_combine] }
+    .set { ch_fastq_combined }
+    // publish fastq
+    ch_fastq_combined.subscribe {
+        if (it.get("publish_fastq")) {
+            def output_dir = file_in_dir(it.output_run_dir, "fastq")
+            output_dir.mkdirs()
+            it.fastq.collect { output_file ->
+                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+            }
+        }
+    }
+    // GraphAligner
+    with_keys(ch_fastq_combined, [graphaligner_args: { it.graphaligner_grouping_args }]) {
+        map_call_process(GRAPHALIGNER_GROUPING_DUPLEX,
+            it,
+            ["fastq_duplex", "gfa_grouping", "graphaligner_args"],
+            [id: { fastq, meta -> fastq.name.replaceFirst(/\.fastq\.gz$/, "") }],
+            "fastq",
+            ["gaf_grouping_duplex"],
+            "_GRAPHALIGNER_GROUPING_DUPLEX") { fastq, meta -> [fastq, meta.gfa_grouping] }
+    }
+    .set { ch_did_graphaligner_grouping_duplex }
+    ch_did_graphaligner_grouping_duplex.map {
+        [
+            *:it,
+            gaf_grouping_simplex: it.gaf_grouping,
+            gaf_to_combine: [it.gaf_grouping_duplex, it.gaf_grouping].transpose()
+        ]
+    }
+    .set { ch_gaf_to_combine }
+    // cat gaf/channel-1_merged_duplex.gaf gaf/channel-1_merged.gaf > channel-1_merged.gaf
+    map_call_process(CAT_DUPLEX_GAF,
+        ch_gaf_to_combine,
+        ["gaf_to_combine"],
+        [id: { gaf_to_combine, meta -> gaf_to_combine[1].baseName }],
+        "gaf_to_combine",
+        ["gaf_grouping"],
+        "_CAT_DUPLEX_GAF") { gaf_to_combine, meta -> [gaf_to_combine] }
+    .set { ch_did_nondorado_duplex_pairing }
+    // end of use_dorado_duplex_pairing = false
+    ch_do_nondorado_duplex_pairing.no.mix(ch_did_nondorado_duplex_pairing)
     .set { ch_graphaligner_grouping }
     // bin/join_gaf.py a.bam a.gaf out.arrow
     with_keys(ch_graphaligner_grouping, [join_gaf_args: { it.join_gaf_grouping_args }]) {
@@ -306,6 +448,7 @@ workflow NANOPORE_FISH {
         ["prepare_reads_output"],
         "_PREPARE_READS") { join_gaf_grouping_output, meta -> [join_gaf_grouping_output, meta.gfa_grouping] }
     .set { ch_did_prepare_reads }
+    // publish prepared_reads
     ch_did_prepare_reads.subscribe {
         if (it.get("publish_prepare_reads")) {
             def output_dir = file_in_dir(it.output_run_dir, "prepare_reads")
@@ -341,6 +484,7 @@ workflow NANOPORE_FISH {
         ["prepare_consensus_output"],
         "_PREPARE_CONSENSUS") { consensus_group, meta -> [meta.prepare_reads_output] }
     .set { ch_did_prepare_consensus }
+    // publish prepare_consensus
     ch_did_prepare_consensus.subscribe {
         if (it.get("publish_prepare_consensus")) {
             def output_dir = file_in_dir(it.output_run_dir, "prepare_consensus")
@@ -379,6 +523,7 @@ workflow NANOPORE_FISH {
     .set { ch_did_consensus_unprepared }
     ch_did_consensus_unprepared.mix(ch_did_consensus_prepared)
     .set { ch_did_consensus }
+    // publish consensus
     ch_did_consensus.subscribe {
         if (it.get("publish_consensus")) {
             def output_dir = file_in_dir(it.output_run_dir, "consensus")
@@ -456,6 +601,7 @@ workflow NANOPORE_FISH {
         ["realign_output"],
         "_REALIGN") { join_gaf_variants_output, meta -> [join_gaf_variants_output, meta.gfa_variants] }
     .set { ch_did_realign }
+    // publish realign
     ch_did_realign.subscribe {
         if (it.get("publish_realign")) {
             def output_dir = file_in_dir(it.output_run_dir, "realign")
@@ -481,7 +627,7 @@ workflow NANOPORE_FISH {
         ["extract_segments_output"],
         "_EXTRACT_SEGMENTS") { realign_output, meta -> [realign_output, meta.gfa_variants] }
         .set { ch_extract_segments }
-    // publish tabular output
+    // publish extract_segments
     ch_extract_segments.subscribe {
         if (it.getOrDefault("publish_extract_segments", true)) {
             def output_dir = file_in_dir(it.output_run_dir, "extract_segments")

@@ -20,6 +20,12 @@ process MINIMAP2_INDEX {
         ${meta.minimap2_index_args ?: ""} \\
         ${fasta}
     """
+
+    stub:
+    """
+    touch ${meta.id}.1.mmi
+    touch ${meta.id}.2.mmi
+    """
 }
 
 def call_MINIMAP2_INDEX(ch) {
@@ -71,6 +77,12 @@ process MINIMAP2_ALIGN {
         ${reference} \\
         ${reads} \\
         ${output}) 2> ${meta.id}.minimap2.log
+    """
+
+    stub:
+    """
+    touch ${meta.id}.bam
+    touch ${meta.id}.minimap2.log
     """
 }
 
