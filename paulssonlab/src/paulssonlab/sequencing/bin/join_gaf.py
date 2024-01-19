@@ -56,7 +56,11 @@ def join_reads_and_gaf(
         batches = iter_bam_and_gaf(
             input_filename[0], gaf_filename, include_unaligned=include_unaligned
         )
-        table = pa.Table.from_batches(batches)
+        table = pa.concat_tables(
+            [pa.Table.from_batches([batch]) for batch in batches],
+            promote_options="default",
+        )
+        # table = pa.Table.from_batches(batches)
         # can't do this streaming because we need to unify dictionaries
         table = table.unify_dictionaries()
     else:
