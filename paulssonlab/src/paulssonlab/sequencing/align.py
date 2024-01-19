@@ -77,7 +77,6 @@ def degenerate_parasail_matrix(
     if degenerate_mismatch is None:
         degenerate_mismatch = mismatch
     bases = "ATCG" + "".join(degenerate_bases.keys())
-    bases_set = set(bases)
     base_to_idx = {base: idx for idx, base in enumerate(bases)}
     if degenerate_match is None:
         degenerate_match = match
