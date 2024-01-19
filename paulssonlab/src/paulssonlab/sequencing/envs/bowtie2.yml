@@ -3,5 +3,5 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - bowtie2=2.4.2
-  - samtools=1.16.1
+  - bowtie2=2.5.3
+  - samtools=1.19

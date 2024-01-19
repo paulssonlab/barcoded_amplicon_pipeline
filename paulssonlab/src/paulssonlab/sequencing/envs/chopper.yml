@@ -3,4 +3,4 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - chopper=0.3.0
+  - chopper=0.7.0
