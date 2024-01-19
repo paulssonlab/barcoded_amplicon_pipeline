@@ -402,7 +402,7 @@ workflow NANOPORE_FISH {
     map_call_process(CAT_DUPLEX_FASTQ,
         ch_fastq_to_combine,
         ["fastq_to_combine"],
-        [id: { fastq_to_combine, meta -> fastq_to_combine[1].baseName }],
+        [id: { fastq_to_combine, meta -> fastq_to_combine[1] }],
         "fastq_to_combine",
         ["fastq"],
         "_CAT_DUPLEX_FASTQ") { fastq_to_combine, meta -> [fastq_to_combine] }
@@ -440,7 +440,7 @@ workflow NANOPORE_FISH {
     map_call_process(CAT_DUPLEX_GAF,
         ch_gaf_to_combine,
         ["gaf_to_combine"],
-        [id: { gaf_to_combine, meta -> gaf_to_combine[1].baseName }],
+        [id: { gaf_to_combine, meta -> gaf_to_combine[1] }],
         "gaf_to_combine",
         ["gaf_grouping"],
         "_CAT_DUPLEX_GAF") { gaf_to_combine, meta -> [gaf_to_combine] }
