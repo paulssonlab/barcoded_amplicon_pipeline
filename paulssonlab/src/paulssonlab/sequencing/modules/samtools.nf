@@ -23,6 +23,31 @@ process SAMTOOLS_FASTQ {
     """
 }
 
+process SAMTOOLS_IMPORT {
+    tag "$meta.id"
+
+    time 10.min
+    memory 1.GB
+
+    input:
+    tuple val(meta), path(fastq)
+
+    output:
+    tuple val(meta), path("${meta.id}.bam")
+
+    conda "${params.conda_env_dir}/samtools.yml"
+
+    script:
+    """
+    samtools import ${meta.samtools_import_args ?: ""} -0 ${fastq} -o ${meta.id}.bam
+    """
+
+    stub:
+    """
+    touch ${meta.id}.bam
+    """
+}
+
 process SAMTOOLS_MERGE {
     tag "$meta.id"
 
