@@ -32,7 +32,7 @@ GAF_COLUMN_TYPES = {
     "mapping_quality": pa.uint8(),
 }
 SAM_TAG_REGEX = re.compile(
-    r"^(?P<tag>[a-zA-Z0-9]+):(?P<tag_value>A:.|f:\d+(\.\d+)?|i:\d+|Z:.*)$"
+    r"^(?P<tag>[a-zA-Z0-9]+):(?P<tag_value>A:.|f:(\+|-)?\d+(\.\d+)?|i:(\+|-)?\d+|Z:.*)$"
 )
 DEFAULT_BAM_COLUMNS = {"read_seq": pa.string(), "read_phred": pa.list_(pa.uint8())}
 DEFAULT_BAM_TAGS = {
@@ -60,7 +60,7 @@ DEFAULT_BAM_TAGS = {
 
 def parse_gaf_types(gaf_filename):
     with open(gaf_filename, "r") as f:
-        first_row = f.readline().split("\t")
+        first_row = f.readline().rstrip("\n").split("\t")
     columns_to_parse = {}
     column_types = []
     for idx in reversed(range(len(first_row))):
