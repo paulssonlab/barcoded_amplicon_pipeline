@@ -16,7 +16,6 @@ from paulssonlab.sequencing.gfa import (
     filter_gfa_options,
     gfa_to_dag,
 )
-from paulssonlab.sequencing.processing import find_duplex_pairs
 from paulssonlab.sequencing.processing import find_duplex_pairs as _find_duplex_pairs
 from paulssonlab.sequencing.processing import load_pairing_data
 
