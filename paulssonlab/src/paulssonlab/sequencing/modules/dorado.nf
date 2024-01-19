@@ -42,7 +42,7 @@ process DORADO_BASECALLER {
     script:
     """
     module load gcc/9.2.0
-    module load cuda/11.7
+    module load cuda/12.1
     # TODO
     echo -n "HOSTNAME: "
     hostname -a
@@ -79,7 +79,7 @@ process DORADO_DUPLEX {
     script:
     """
     module load gcc/9.2.0
-    module load cuda/11.7
+    module load cuda/12.1
     # TODO
     echo -n "HOSTNAME: "
     hostname -a
@@ -114,7 +114,7 @@ process DORADO_DUPLEX_WITH_PAIRS {
     script:
     """
     module load gcc/9.2.0
-    module load cuda/11.7
+    module load cuda/12.1
     # TODO
     echo -n "HOSTNAME: "
     hostname -a
