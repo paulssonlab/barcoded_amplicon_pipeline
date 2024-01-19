@@ -45,6 +45,8 @@ workflow NANOPORE_FISH {
         publish_realign: false,
         publish_extract_segments: true,
         output: "extract_segments", // possible values: "pod5", "basecaller", "consensus", "extract_segments"
+        samtools_fastq_args: "-T \"*\"",
+        samtools_import_args: "-T \"*\"",
         samtools_merge_args: "-c",
         tabular_format: "arrow",
         graphaligner_args: "-x dbg",

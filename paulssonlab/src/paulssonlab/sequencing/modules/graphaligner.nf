@@ -13,9 +13,16 @@ process GRAPHALIGNER {
     conda "${params.conda_env_dir}/graphaligner.yml"
 
     script:
-    """
-    GraphAligner -t ${task.cpus} ${meta.graphaligner_args ?: ""} -f ${reads} -g ${gfa} -a ${meta.id}.gaf
-    """
+    if (meta.getOrDefault("graphaligner_strip_tags", true)) {
+        """
+        seqkit replace -p "\s.+" -o ${meta.id}_notags.fastq.gz ${reads}
+        GraphAligner -t ${task.cpus} ${meta.graphaligner_args ?: ""} -f ${meta.id}_notags.fastq.gz -g ${gfa} -a ${meta.id}.gaf
+        """
+    } else {
+        """
+        GraphAligner -t ${task.cpus} ${meta.graphaligner_args ?: ""} -f ${reads} -g ${gfa} -a ${meta.id}.gaf
+        """
+    }
 
     stub:
     """
