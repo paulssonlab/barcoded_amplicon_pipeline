@@ -8,7 +8,7 @@ process FIND_DUPLEX_PAIRS {
     tuple val(meta), path(gfa), path(bam), path(gaf)
 
     output:
-    tuple val(meta), path("${meta.id}_pairs.csv")
+    tuple val(meta), path("${meta.id}_pairs.txt")
 
     // TODO
     conda "/home/jqs1/micromamba/envs/medaka"
@@ -16,12 +16,12 @@ process FIND_DUPLEX_PAIRS {
 
     script:
     """
-    ${src}/sequencing/bin/find_duplex_pairs.py ${meta.find_duplex_reads_args ?: ""} --gfa ${gfa} --gaf ${gaf} ${bam} ${meta.id}_pairs.csv
+    ${src}/sequencing/bin/find_duplex_pairs.py ${meta.find_duplex_reads_args ?: ""} --gfa ${gfa} --gaf ${gaf} ${bam} ${meta.id}_pairs.txt
     """
 
     stub:
     """
-    touch ${meta.id}_pairs.csv
+    touch ${meta.id}_pairs.txt
     """
 }
 
