@@ -40,7 +40,7 @@ process SAMTOOLS_MERGE {
 
     script:
     """
-    samtools merge -@ ${task.cpus} ${meta.samtools_merge_args ?: ""} ${input} ${meta.id}.fastq.gz
+    samtools merge -@ ${task.cpus} ${meta.samtools_merge_args ?: ""} -o ${meta.id}.fastq.gz ${input}
     """
 
     stub:
