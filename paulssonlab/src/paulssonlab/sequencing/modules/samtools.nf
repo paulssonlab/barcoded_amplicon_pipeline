@@ -15,7 +15,6 @@ process SAMTOOLS_FASTQ {
     script:
     """
     samtools fastq -@ ${task.cpus} ${meta.samtools_fastq_args ?: ""} ${bam} -0 ${meta.id}.fastq.gz
-    #samtools view -s 17.1 ${bam} | samtools fastq ${args} -0 ${meta.id}.fastq.gz -
     """
 
     stub:
