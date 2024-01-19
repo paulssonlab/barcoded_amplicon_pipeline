@@ -10,8 +10,7 @@ process GRAPHALIGNER {
     output:
     tuple val(meta), path("${meta.id}.gaf")
 
-    // TODO
-    //conda "${params.conda_env_dir}/graphaligner.yml"
+    conda "${params.conda_env_dir}/graphaligner.yml"
 
     script:
     """
