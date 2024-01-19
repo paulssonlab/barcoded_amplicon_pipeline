@@ -58,18 +58,18 @@ process SAMTOOLS_MERGE {
     tuple val(meta), path(input, stageAs: "input/*")
 
     output:
-    tuple val(meta), path("${meta.id}.fastq.gz")
+    tuple val(meta), path("${meta.id}.bam")
 
     conda "${params.conda_env_dir}/samtools.yml"
 
     script:
     """
-    samtools merge -@ ${task.cpus} ${meta.samtools_merge_args ?: ""} -o ${meta.id}.fastq.gz ${input}
+    samtools merge -@ ${task.cpus} ${meta.samtools_merge_args ?: ""} -o ${meta.id}.bam ${input}
     """
 
     stub:
     """
-    touch ${meta.id}.fastq.gz
+    touch ${meta.id}.bam
     """
 }
 
