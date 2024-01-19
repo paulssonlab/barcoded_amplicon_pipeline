@@ -8,6 +8,7 @@ include { DORADO_DOWNLOAD;
           DORADO_DUPLEX_WITH_PAIRS } from '../../modules/dorado.nf'
 include { SAMTOOLS_FASTQ;
           SAMTOOLS_FASTQ as SAMTOOLS_FASTQ_DUPLEX;
+          SAMTOOLS_IMPORT;
           SAMTOOLS_MERGE } from '../../modules/samtools.nf'
 include { GRAPHALIGNER as GRAPHALIGNER_GROUPING;
           GRAPHALIGNER as GRAPHALIGNER_GROUPING_DUPLEX;
@@ -33,6 +34,7 @@ workflow NANOPORE_FISH {
 
     main:
     def DEFAULT_ARGS = [
+        basecall: true,
         duplex: true,
         use_dorado_duplex_pairing: false,
         pod5_chunk: true,
@@ -269,7 +271,7 @@ workflow NANOPORE_FISH {
             }
         }
     }
-    ch_basecalled.mix(ch_input_type.bam.map { [*:it, bam: it.bam_input] } )
+    ch_basecalled.mix(ch_input_type.bam.map { [*:it, bam: it.bam_input, basecall: false] } )
     .set { ch_bam }
     // use samtools to convert sam to fastq.gz
     map_call_process(SAMTOOLS_FASTQ,
@@ -279,9 +281,9 @@ workflow NANOPORE_FISH {
         "bam",
         ["fastq"],
         "_SAMTOOLS_FASTQ") { bam, meta -> [bam] }
-    .set { ch_converted_to_fastq }
+    .set { ch_converted_bam_to_fastq }
     // publish fastq
-    ch_converted_to_fastq.subscribe {
+    ch_converted_bam_to_fastq.subscribe {
         if (it["publish_fastq"] && it["use_dorado_duplex_pairing"]) {
             def output_dir = file_in_dir(it.output_run_dir, "fastq")
             output_dir.mkdirs()
@@ -290,9 +292,20 @@ workflow NANOPORE_FISH {
             }
         }
     }
-    ch_converted_to_fastq.mix(ch_input_type.fastq.map { [*:it, fastq: it.fastq_input] })
-    .set { ch_fastq }
-    ch_fastq.branch {
+    ch_input_type.fastq.map { [*:it, fastq: it.fastq_input, basecall: false] }
+    .set { ch_fastq_input }
+    // convert input fastq to bam
+    map_call_process(SAMTOOLS_IMPORT,
+        ch_fastq_input,
+        ["fastq", "samtools_import_args"],
+        [id: { fastq, meta -> fastq.baseName }],
+        "fastq",
+        ["bam"],
+        "_SAMTOOLS_IMPORT") { fastq, meta -> [fastq] }
+    .set { ch_converted_fastq_to_bam }
+    ch_converted_bam_to_fastq.mix(ch_converted_fastq_to_bam)
+    .set { ch_bam_and_fastq }
+    ch_bam_and_fastq.branch {
         no: it["output"] == "basecaller"
         yes: true
     }
@@ -314,7 +327,7 @@ workflow NANOPORE_FISH {
     }
     .set { ch_bam_and_gaf }
     ch_bam_and_gaf.branch {
-        yes: it["duplex"] && !it["use_dorado_duplex_pairing"]
+        yes: it["basecall"] && it["duplex"] && !it["use_dorado_duplex_pairing"]
         no: true
     }
     .set { ch_do_nondorado_duplex_pairing }
