@@ -16,7 +16,7 @@ process FIND_DUPLEX_PAIRS {
 
     script:
     """
-    ${src}/sequencing/bin/find_duplex_reads.py ${meta.find_duplex_reads_args ?: ""} --gfa ${gfa} --gaf ${gaf} ${bam} ${meta.id}_pairs.csv
+    ${src}/sequencing/bin/find_duplex_pairs.py ${meta.find_duplex_reads_args ?: ""} --gfa ${gfa} --gaf ${gaf} ${bam} ${meta.id}_pairs.csv
     """
 
     stub:
