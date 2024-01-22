@@ -15,7 +15,7 @@ process GRAPHALIGNER {
     script:
     if (meta.getOrDefault("graphaligner_strip_tags", true)) {
         """
-        seqkit replace -p "\s.+" -o ${meta.id}_notags.fastq.gz ${reads}
+        seqkit replace -p "\\s.+" -o ${meta.id}_notags.fastq.gz ${reads}
         GraphAligner -t ${task.cpus} ${meta.graphaligner_args ?: ""} -f ${meta.id}_notags.fastq.gz -g ${gfa} -a ${meta.id}.gaf
         """
     } else {
