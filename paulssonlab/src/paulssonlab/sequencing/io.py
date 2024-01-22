@@ -153,7 +153,7 @@ def iter_bam_and_gaf(
     aligned_read_names = set()
     bam_types = None
     unaligned_batch_size = None
-    batch = None
+    new_batch = None
     for batch in iter_gaf(gaf_filename, block_size=block_size):
         if unaligned_batch_size is None:
             # use the size of the first GAF RecordBatch as the unaligned chunk size
@@ -191,15 +191,13 @@ def iter_bam_and_gaf(
             columns[col_name] = pa.array(bam_columns[col_name], col_type)
         new_batch = pa.RecordBatch.from_pydict(columns)
         yield new_batch
-    if batch is None:
-        raise ValueError("GAF cannot be empty")
     if include_unaligned:
         bam.reset()  # rewind bam file to beginning
         bam_iter = bam.fetch(until_eof=True)
         bam_columns = None
         num_reads = 0
-        eof = False
         bam_types_with_name = {"name": pa.string(), **bam_types}
+        eof = False
         while True:
             for read in bam_iter:
                 if read.query_name not in aligned_read_names:
@@ -215,24 +213,28 @@ def iter_bam_and_gaf(
                             tag_value = None
                         bam_columns[tag].append(tag_value)
                     num_reads += 1
-                    break
+                    if num_reads == unaligned_batch_size:
+                        break
             else:
                 eof = True
-            if num_reads == unaligned_batch_size or eof:
-                if bam_columns is None:
-                    # no rows to yield
-                    return
-                columns = {}
-                for col_name, col_type in zip(batch.schema.names, batch.schema.types):
-                    if col_name in bam_columns:
-                        columns[col_name] = pa.array(bam_columns[col_name], col_type)
-                    else:
-                        columns[col_name] = pa.nulls(num_reads, col_type)
-                new_batch = pa.RecordBatch.from_pydict(columns)
-                yield new_batch
-                # start new batch
-                bam_columns = None
-                num_reads = 0
+            columns = {}
+            if new_batch is None:
+                # all reads are unaligned, so we don't have a GAF schema
+                unaligned_types = bam_types.items()
+            else:
+                unaligned_types = zip(new_batch.schema.names, new_batch.schema.types)
+            for col_name, col_type in unaligned_types:
+                if col_name in bam_columns:
+                    columns[col_name] = pa.array(bam_columns[col_name], col_type)
+                else:
+                    columns[col_name] = pa.nulls(num_reads, col_type)
+            new_batch = pa.RecordBatch.from_pydict(columns)
+            yield new_batch
+            if eof:
+                return
+            # start new batch
+            bam_columns = None
+            num_reads = 0
 
 
 def read_bam_and_gaf(bam_filename, gaf_filename, **kwargs):
