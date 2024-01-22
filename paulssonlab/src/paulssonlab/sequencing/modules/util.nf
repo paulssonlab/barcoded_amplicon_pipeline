@@ -1,9 +1,9 @@
 process CAT {
     tag "$meta.id"
-    label "local"
+    //label "local"
 
-    //time 10.min
-    //memory 1.GB
+    time 10.min
+    memory 200.MB
 
     input:
     tuple val(meta), path(input, stageAs: "input/*")
