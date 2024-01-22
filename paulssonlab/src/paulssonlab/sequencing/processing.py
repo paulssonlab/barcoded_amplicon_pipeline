@@ -37,15 +37,7 @@ def _segments_for_normalize_path(forward_segments):
 def normalize_paths(
     df,
     forward_segments,
-    keep_unaligned=False,
-    endpoints=None,
-    hash_paths=True,
 ):
-    if endpoints:
-        if len(endpoints) != 2:
-            raise ValueError("endpoints should contain two lists of segment names")
-        if not endpoints[0] or not endpoints[1]:
-            raise ValueError(f"both lists of endpoints must be non-empty: {endpoints}")
     (
         path_filter,
         reverse_segments,
@@ -53,32 +45,34 @@ def normalize_paths(
     ) = _segments_for_normalize_path(forward_segments)
     df = (
         df.rename({"path": "full_path"})
-        # .is_first_distinct() picks better (primary) alignment instead of alternate alignment
-        # if input is in GAF order
-        # .filter(pl.col("name").is_first_distinct())
-        # TODO: polars bug, is_first_distinct() returns empty dataframe
-        # when used in a more complicated lazy query,
-        # exact cause unknown
-        .filter(pl.col("name").is_duplicated().not_())
         .with_columns(
             pl.col("full_path")
-            .list.set_intersection(path_filter)
-            # TODO: waiting on https://github.com/pola-rs/polars/issues/11735
-            # to keep path columns as categorical
-            .cast(pl.List(pl.Categorical))
+            .list.set_intersection(pl.lit(path_filter, dtype=pl.List(pl.Categorical)))
             .alias("_path"),
         )
         .with_columns(
             pl.col("_path")
             .list.reverse()
-            .list.eval(pl.element().map_dict(reverse_path_mapping))
+            .list.eval(
+                pl.element().replace(
+                    reverse_path_mapping, default=None, return_dtype=pl.Categorical
+                )
+            )
             .alias("_path_reversed"),
             (
-                pl.col("full_path").list.set_intersection(forward_segments).list.len()
+                pl.col("full_path")
+                .list.set_intersection(
+                    pl.lit(forward_segments, dtype=pl.List(pl.Categorical))
+                )
+                .list.len()
                 > 0
             ).alias("_is_forward"),
             (
-                pl.col("full_path").list.set_intersection(reverse_segments).list.len()
+                pl.col("full_path")
+                .list.set_intersection(
+                    pl.lit(reverse_segments, dtype=pl.List(pl.Categorical))
+                )
+                .list.len()
                 > 0
             ).alias("_is_reverse"),
         )
@@ -97,73 +91,116 @@ def normalize_paths(
             .then(pl.col("_path_reversed"))
             .alias("path")
         )
-    )
-    if hash_paths:
-        df = df.with_columns(pl.col("path").hash().alias("path_hash"))
-    if not keep_unaligned:
-        df = df.filter(pl.col("path").is_not_null())
-    if endpoints:
-        df = df.filter(
-            (pl.col("path").list.set_intersection(endpoints[0]).list.len() > 0)
-            & (pl.col("path").list.set_intersection(endpoints[1]).list.len() > 0)
+        .select(
+            pl.all().exclude("_path", "_path_reversed", "_is_forward", "_is_reverse")
         )
+    )
     return df
 
 
-def identify_usable_reads(df):
+def flag_end_to_end(df, endpoints):
+    if len(endpoints) != 2:
+        raise ValueError("endpoints should contain two lists of segment names")
+    if not endpoints[0] or not endpoints[1]:
+        raise ValueError(f"both lists of endpoints must be non-empty: {endpoints}")
+    return df.with_columns(
+        end_to_end=(
+            pl.col("path")
+            .list.set_intersection(pl.lit(endpoints[0], dtype=pl.List(pl.Categorical)))
+            .list.len()
+            > 0
+        )
+        & (
+            pl.col("path")
+            .list.set_intersection(pl.lit(endpoints[1], dtype=pl.List(pl.Categorical)))
+            .list.len()
+            > 0
+        )
+    )
+
+
+def flag_valid_reads(df):
+    # output makes the most sense if input has only
+    # end-to-end (barcode) alignments, nonduplicated alignments
     df_input = df.with_columns(
-        pl.col("name").str.split(";").alias("parent_names")
-    ).with_columns(
-        pl.when(pl.col("parent_names").list.len() == 2)
-        .then(True)
-        .otherwise(False)
-        .alias("is_duplex")
+        pl.col("name").str.split(";").alias("_parent_names"),
     )
     df_with_parents = (
-        df_input.filter(pl.col("is_duplex"))
-        .select(pl.col("name"), pl.col("parent_names").alias("_parent_name"))
+        df_input.filter(pl.col("dx") == 1)
+        .select(
+            pl.col("name"),
+            pl.col("path").alias("_duplex_path"),
+            pl.col("_parent_names").alias("_parent_name"),
+        )
         .explode("_parent_name")
         .join(
-            df.select(pl.col("name", "path")),
+            df.select(
+                pl.col("name"),
+                pl.col("reverse_complement"),
+                pl.col("path").alias("_parent_path"),
+            ),
             how="left",
             left_on=pl.col("_parent_name"),
             right_on=pl.col("name"),
         )
     )
-    df_duplex_paths_match = (
+    df_duplex_is_valid = (
         df_with_parents.with_columns(
-            pl.col("path").first().over("name").alias("_path_first")
-        )
-        .with_columns(
-            (pl.col("path") == pl.col("_path_first")).alias("_path_matches_first")
+            (pl.col("_duplex_path") == pl.col("_parent_path")).alias("_path_matches")
         )
         .group_by("name")
         .agg(
-            pl.col("_path_matches_first").all().alias("_duplex_paths_match"),
+            pl.col("_path_matches").all(),
+            pl.col("name").len().alias("_group_size"),
+            pl.col("reverse_complement").sum().alias("_num_rc"),
             pl.col("_parent_name"),
         )
+        .with_columns(
+            pl.col("_path_matches")
+            .and_(pl.col("_group_size") == 2, pl.col("_num_rc") == 1)
+            .alias("_duplex_is_valid")
+        )
     )
-    df_simplex_paths_match = df_duplex_paths_match.select(
-        pl.col("_duplex_paths_match").alias("_child_duplex_paths_match"),
+    df_simplex_is_valid = df_duplex_is_valid.select(
+        pl.col("_duplex_is_valid").not_().alias("_simplex_is_valid"),
         pl.col("_parent_name"),
     ).explode("_parent_name")
-    df_usable = (
-        df_input.join(
-            df_duplex_paths_match.select(pl.col("name", "_duplex_paths_match")),
+    df_valid = (
+        df.join(
+            df_duplex_is_valid.select(pl.col("name", "_duplex_is_valid")),
             how="left",
             on="name",
         )
-        .join(
-            df_simplex_paths_match, how="left", left_on="name", right_on="_parent_name"
-        )
+        .join(df_simplex_is_valid, how="left", left_on="name", right_on="_parent_name")
         .with_columns(
-            pl.when(pl.col("is_duplex"))
-            .then(pl.col("_duplex_paths_match").fill_null(False))
-            .otherwise(pl.col("_child_duplex_paths_match").not_().fill_null(True))
-            .alias("usable")
+            pl.when(pl.col("dx") == 1)
+            .then(pl.col("_duplex_is_valid").fill_null(False))
+            .otherwise(pl.col("_simplex_is_valid").fill_null(True))
+            .alias("is_valid")
         )
+        .select(pl.all().exclude("_duplex_is_valid", "_simplex_is_valid"))
     )
-    return df_usable
+    return df_valid
+
+
+def prepare_reads(df, forward_segments, endpoints):
+    df = normalize_paths(df, forward_segments)
+    df = df.with_columns(path_hash=pl.col("path").hash())
+    df = flag_end_to_end(df, endpoints)
+    df = df.with_columns(
+        is_duplicate_alignment=pl.col("name").is_duplicated(),
+    ).with_columns(
+        _candidate=(~pl.col("is_duplicate_alignment") & pl.col("end_to_end"))
+    )
+    # TODO
+    # identify_usable_reads is much faster when working on in-memory data
+    # df = df.collect().lazy()
+    # there's no difference in doing this lazily or not,
+    # so I'm arbitrarily choosing to do it lazily
+    df_valid_reads = flag_valid_reads(df.filter(pl.col("_candidate")))
+    df = pl.concat([df_valid_reads, df.filter(~pl.col("_candidate"))], how="diagonal")
+    df = df.select(pl.all().exclude("_candidate"))
+    return df
 
 
 def compute_depth(df):
@@ -204,19 +241,10 @@ def find_duplex_pairs(df, timedelta, forward_segments, endpoints=None):
     ) = _segments_for_normalize_path(forward_segments)
     df = (
         df.rename({"path": "full_path"})
-        # .is_first_distinct() picks better (primary) alignment instead of alternate alignment
-        # if input is in GAF order
-        # .filter(pl.col("name").is_first_distinct())
-        # TODO: polars bug, is_first_distinct() returns empty dataframe
-        # when used in a more complicated lazy query,
-        # exact cause unknown
-        .filter(pl.col("name").is_first_distinct())
+        .filter(pl.col("name").is_duplicated().not_())
         .with_columns(
             pl.col("full_path")
-            .list.set_intersection(path_filter)
-            # TODO: waiting on https://github.com/pola-rs/polars/issues/11735
-            # to keep path columns as categorical
-            .cast(pl.List(pl.Categorical))
+            .list.set_intersection(pl.lit(path_filter, dtype=pl.List(pl.Categorical)))
             .alias("_path"),
         )
         .with_columns(
@@ -227,10 +255,7 @@ def find_duplex_pairs(df, timedelta, forward_segments, endpoints=None):
         )
     )
     if endpoints:
-        df = df.filter(
-            (pl.col("_path").list.set_intersection(endpoints[0]).list.len() > 0)
-            & (pl.col("_path").list.set_intersection(endpoints[1]).list.len() > 0)
-        )
+        df = flag_end_to_end(df, endpoints).filter(pl.col("end_to_end"))
     df_sorted = df.sort("st")
     df_endtime = df.with_columns(
         (pl.col("st") + pl.duration(seconds="du")).alias("_endtime")
@@ -331,7 +356,7 @@ def pairwise_align_df_to_path(
     align_kwargs={},
 ):
     name_to_seq = gfa_name_mapping(gfa)
-    dtype = pl.Struct({score_column: pl.Int32, cigar_column: pl.Utf8})
+    dtype = pl.Struct({score_column: pl.Int32, cigar_column: pl.String})
     return df.select(
         pl.all(),
         pl.struct(
@@ -419,9 +444,9 @@ def _cut_cigar_dtype(
         if all(isinstance(v, int) for v in variants[k]):
             segments_to_variant_type[k] = pl.Int32
         else:
-            segments_to_variant_type[k] = pl.Utf8
+            segments_to_variant_type[k] = pl.String
     if return_variants:
-        dtype[f"{segment_name}{key_sep}variant"] = pl.Utf8
+        dtype[f"{segment_name}{key_sep}variant"] = pl.String
     for segment_name in segment_names:
         if segment_name in full_to_segment_name:
             segment_name = full_to_segment_name[segment_name]
@@ -443,7 +468,7 @@ def _cut_cigar_dtype(
             for op in OP_TO_COLUMN_NAME.values():
                 dtype[f"{segment_name}{key_sep}{op}"] = pl.Int32
         if return_cigars:
-            dtype[f"{segment_name}{key_sep}cigar"] = pl.Utf8
+            dtype[f"{segment_name}{key_sep}cigar"] = pl.String
     return pl.Struct(dtype)
 
 
