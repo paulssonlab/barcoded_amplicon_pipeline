@@ -38,6 +38,10 @@ workflow NANOPORE_FISH {
         duplex: true,
         use_dorado_duplex_pairing: false,
         pod5_chunk: true,
+        // pod5_chunk_files or pod5_chunk_bytes: must be specified by the user
+        // dorado_job_bytes or dorado_jobs: may be specified to turn on dorado job chunking
+        pod5_split: true,
+        pod5_split_by: ["channel"],
         realign: true,
         publish_pod5: true,
         publish_bam: true,
@@ -87,6 +91,9 @@ workflow NANOPORE_FISH {
             join_gaf_variants_args: it.get("join_gaf_args"),
             *:it
         ]
+        if (it.get("pod5_chunk") && ([it.get("pod5_chunk_files").asBoolean(), it.get("pod5_chunk_bytes").asBoolean()].sum() != 1)) {
+            throw new Exception("exactly one of pod5_chunk_files or pod5_chunk_bytes must be specified if pod5_chunk=true")
+        }
         if (it["align"]) {
             if (!it.get("gfa_grouping")) {
                 throw new Exception("gfa or gfa_grouping must be specified if aligning")
@@ -108,12 +115,7 @@ workflow NANOPORE_FISH {
     }
     .set { ch_input_type }
     ch_input_type.pod5.branch {
-        // chunk pod5 files UNLESS:
-        // map contains the key pod5_chunk and it is false
-        // OR both pod5_chunk_bytes and pod5_chunk_files are falsy
-        yes: !(!it["pod5_chunk"]
-                || (!it.get("pod5_chunk_bytes")
-                    && !it.get("pod5_chunk_files")))
+        yes: it["pod5_chunk"]
         no: true
     }
     .set { ch_do_pod5_chunk }
@@ -136,17 +138,14 @@ workflow NANOPORE_FISH {
             [*:it, pod5_to_split: it.get("pod5_input")]
         } )
     .branch {
-        yes: it.get("pod5_split")
+        yes: it["pod5_split"]
         no: true
     }
     .set { ch_do_pod5_split }
     ch_do_pod5_split.yes.map {
-        def pod5_split_by = it.get("pod5_split_by") ?: ["channel"]
-        def pod5_split_chunks = it.get("pod5_split_chunks") ?: 400
         [*:it,
-            pod5_split_by: pod5_split_by,
             pod5_view_args: "--include \"${['read_id', *pod5_split_by].join(',')}\" ${it.get('pod5_view_args') ?: ''}",
-            pod5_subset_args: "--columns ${pod5_split_by.join(' ')} ${it.get('pod5_subset_args') ?: ''}"]
+            pod5_subset_args: "--columns ${it.get('pod5_split_by').join(' ')} ${it.get('pod5_subset_args') ?: ''}"]
     }
     .set { ch_to_pod5_split }
     map_call_process(POD5_VIEW_AND_SUBSET,
@@ -167,12 +166,7 @@ workflow NANOPORE_FISH {
     }
     .set { ch_to_pod5_split_merge }
     ch_to_pod5_split_merge.branch {
-        // chunk pod5 files UNLESS:
-        // map contains the key pod5_chunk and it is false
-        // OR both pod5_chunk_bytes and pod5_chunk_files are falsy
-        yes: !((it.containsKey("pod5_chunk") && !it["pod5_chunk"])
-                                    || (!it.get("pod5_chunk_bytes")
-                                        && !it.get("pod5_chunk_files")))
+        yes: it["pod5_chunk"]
         no: true
     }
     .set { ch_do_pod5_split_chunk }
