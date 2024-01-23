@@ -98,20 +98,20 @@ def normalize_paths(
     return df
 
 
-def flag_end_to_end(df, endpoints):
+def flag_end_to_end(df, endpoints, path_column="path"):
     if len(endpoints) != 2:
         raise ValueError("endpoints should contain two lists of segment names")
     if not endpoints[0] or not endpoints[1]:
         raise ValueError(f"both lists of endpoints must be non-empty: {endpoints}")
     return df.with_columns(
         end_to_end=(
-            pl.col("path")
+            pl.col(path_column)
             .list.set_intersection(pl.lit(endpoints[0], dtype=pl.List(pl.Categorical)))
             .list.len()
             > 0
         )
         & (
-            pl.col("path")
+            pl.col(path_column)
             .list.set_intersection(pl.lit(endpoints[1], dtype=pl.List(pl.Categorical)))
             .list.len()
             > 0
@@ -254,7 +254,9 @@ def find_duplex_pairs(df, timedelta, forward_segments, endpoints=None):
         )
     )
     if endpoints:
-        df = flag_end_to_end(df, endpoints).filter(pl.col("end_to_end"))
+        df = flag_end_to_end(df, endpoints, path_column="_path").filter(
+            pl.col("end_to_end")
+        )
     df_sorted = df.sort("st")
     df_endtime = df.with_columns(
         (pl.col("st") + pl.duration(seconds="du")).alias("_endtime")
