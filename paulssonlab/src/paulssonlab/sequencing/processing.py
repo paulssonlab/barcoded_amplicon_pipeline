@@ -119,7 +119,7 @@ def flag_end_to_end(df, endpoints):
     )
 
 
-def flag_valid_reads(df):
+def flag_valid_ont_duplex_reads(df):
     # output makes the most sense if input has only
     # end-to-end (barcode) alignments, nonduplicated alignments
     df_input = df.with_columns(
@@ -192,13 +192,12 @@ def prepare_reads(df, forward_segments, endpoints):
     ).with_columns(
         _candidate=(~pl.col("is_duplicate_alignment") & pl.col("end_to_end"))
     )
-    # TODO
-    # identify_usable_reads is much faster when working on in-memory data
-    # df = df.collect().lazy()
-    # there's no difference in doing this lazily or not,
-    # so I'm arbitrarily choosing to do it lazily
-    df_valid_reads = flag_valid_reads(df.filter(pl.col("_candidate")))
-    df = pl.concat([df_valid_reads, df.filter(~pl.col("_candidate"))], how="diagonal")
+    # only ONT duplex reads will have dx SAM tag
+    if "dx" in df.columns:
+        df_valid_reads = flag_valid_ont_duplex_reads(df.filter(pl.col("_candidate")))
+        df = pl.concat(
+            [df_valid_reads, df.filter(~pl.col("_candidate"))], how="diagonal"
+        )
     df = df.select(pl.all().exclude("_candidate"))
     return df
 

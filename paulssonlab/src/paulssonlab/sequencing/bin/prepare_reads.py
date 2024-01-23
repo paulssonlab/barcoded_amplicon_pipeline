@@ -15,7 +15,7 @@ from paulssonlab.sequencing.gfa import (
     filter_gfa_options,
     gfa_to_dag,
 )
-from paulssonlab.sequencing.processing import identify_usable_reads, normalize_paths
+from paulssonlab.sequencing.processing import prepare_reads as _prepare_reads
 from paulssonlab.sequencing.util import detect_format
 
 
@@ -29,8 +29,6 @@ def prepare_reads(
     include_prefix,
     exclude,
     exclude_prefix,
-    end_to_end,
-    hash_paths,
 ):
     input_format = detect_format(
         input_format,
@@ -45,23 +43,13 @@ def prepare_reads(
     # weakly_connected_components is a generator, so only compute once
     wccs = list(nx.weakly_connected_components(graph))
     forward_segments = dag_forward_segments(graph, wccs=wccs)
-    if end_to_end:
-        endpoints = dag_endpoints(graph, wccs=wccs)
-    else:
-        endpoints = None
+    endpoints = dag_endpoints(graph, wccs=wccs)
     with pl.StringCache():
         if input_format == "arrow":
             df = pl.concat([pl.scan_ipc(f) for f in input_filename])
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename])
-        df = normalize_paths(
-            df, forward_segments, endpoints=endpoints, hash_paths=hash_paths
-        )
-        # identify_usable_reads is much faster when working on in-memory data
-        df = df.collect().lazy()
-        # there's no difference in doing this lazily or not,
-        # so I'm arbitrarily choosing to do it lazily
-        df = identify_usable_reads(df)
+        df = prepare_reads(df, forward_segments, endpoints)
         df = df.collect()
         if output_format == "arrow":
             df.write_ipc(output_filename)
@@ -81,14 +69,6 @@ def prepare_reads(
     type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
 @filter_gfa_options
-@click.option(
-    "--end-to-end/--no-end-to-end",
-    default=True,
-    help="Only use alignments with paths that span graph end-to-end",
-)
-@click.option(
-    "--hash-paths/--no-hash-paths", default=True, help="Precompute path hashes"
-)
 @click.option("--gfa", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.argument("input", type=click.Path(exists=True, dir_okay=False), nargs=-1)
 @click.argument("output", type=click.Path())
@@ -102,8 +82,6 @@ def cli(
     include_prefix,
     exclude,
     exclude_prefix,
-    end_to_end,
-    hash_paths,
 ):
     prepare_reads(
         gfa,
@@ -115,8 +93,6 @@ def cli(
         include_prefix,
         exclude,
         exclude_prefix,
-        end_to_end,
-        hash_paths,
     )
 
 
