@@ -91,7 +91,7 @@ workflow NANOPORE_FISH {
             join_gaf_variants_args: it.get("join_gaf_args"),
             *:it
         ]
-        if (it.get("pod5_chunk") && ([it.get("pod5_chunk_files").asBoolean(), it.get("pod5_chunk_bytes").asBoolean()].sum() != 1)) {
+        if (it.get("pod5_chunk") && ([it.get("pod5_chunk_files"), it.get("pod5_chunk_bytes")].collect { v -> v ? 1 : 0 }.sum() != 1)) {
             throw new Exception("exactly one of pod5_chunk_files or pod5_chunk_bytes must be specified if pod5_chunk=true")
         }
         if (it["align"]) {
@@ -144,7 +144,7 @@ workflow NANOPORE_FISH {
     .set { ch_do_pod5_split }
     ch_do_pod5_split.yes.map {
         [*:it,
-            pod5_view_args: "--include \"${['read_id', *pod5_split_by].join(',')}\" ${it.get('pod5_view_args') ?: ''}",
+            pod5_view_args: "--include \"${['read_id', *it.get('pod5_split_by')].join(',')}\" ${it.get('pod5_view_args') ?: ''}",
             pod5_subset_args: "--columns ${it.get('pod5_split_by').join(' ')} ${it.get('pod5_subset_args') ?: ''}"]
     }
     .set { ch_to_pod5_split }
@@ -346,7 +346,7 @@ workflow NANOPORE_FISH {
     map_call_process(DORADO_DUPLEX_WITH_PAIRS,
         ch_pod5_and_pairs,
         ["pod5_and_pairs", "dorado_model_dir", "dorado_duplex_model_dir", "dorado_duplex_args"],
-        [id: { pod5_and_pairs, meta -> pod5_and_pairs[0].baseName }],
+        [id: { pod5_and_pairs, meta -> exemplar(pod5_and_pairs[0]).baseName }],
         "pod5_and_pairs",
         ["bam_duplex"],
         "_DORADO_DUPLEX_WITH_PAIRS") { pod5_and_pairs, meta -> [pod5_and_pairs[0], pod5_and_pairs[1], meta.dorado_model_dir, meta.dorado_duplex_model_dir] }
