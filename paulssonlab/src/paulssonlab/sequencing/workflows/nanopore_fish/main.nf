@@ -78,6 +78,9 @@ workflow NANOPORE_FISH {
         if (!["basecall", *REQUIRED_INPUTS].collect { k -> it.get(k) }.any()) {
             throw new Exception("missing any pipeline input")
         }
+        if (!(it["output"] in ["pod5", "basecaller", "consensus", "extract_segments"])) {
+            throw new Exception("output must be one of: pod5, basecaller, consensus, extract_segments")
+        }
         it
     }
     .map {
