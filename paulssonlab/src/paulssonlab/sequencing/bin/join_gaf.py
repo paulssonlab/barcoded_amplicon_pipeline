@@ -13,26 +13,6 @@ from paulssonlab.sequencing.io import iter_bam_and_gaf, read_gaf
 from paulssonlab.sequencing.util import detect_format
 
 
-# TODO: obsolete when dorado 0.4.1 is released
-def fix_dx(table):
-    if "dx" in table.column_names:
-        name_col = table.column("name")
-        new_dx = pc.if_else(
-            pc.is_in(
-                name_col,
-                pc.list_flatten(
-                    pc.split_pattern(
-                        name_col.filter(pc.match_substring(name_col, ";")), ";"
-                    )
-                ),
-            ),
-            -1,
-            table.column("dx"),
-        )
-        table = table.set_column(table.column_names.index("dx"), "dx", new_dx)
-    return table
-
-
 def join_reads_and_gaf(
     input_filename,
     output_filename,
@@ -56,11 +36,11 @@ def join_reads_and_gaf(
         batches = iter_bam_and_gaf(
             input_filename[0], gaf_filename, include_unaligned=include_unaligned
         )
+        # could also use pl.concat(..., how="diagonal") here
         table = pa.concat_tables(
             [pa.Table.from_batches([batch]) for batch in batches],
             promote_options="default",
         )
-        # table = pa.Table.from_batches(batches)
         # can't do this streaming because we need to unify dictionaries
         table = table.unify_dictionaries()
     else:
@@ -76,7 +56,6 @@ def join_reads_and_gaf(
                 gaf = gaf.rename(rename_gaf_columns)
             df = reads.join(gaf, on="name", how="left")
             table = df.collect().to_arrow()
-    table = fix_dx(table)  # TODO
     if output_format == "arrow":
         with pa.ipc.new_file(
             output_filename,
