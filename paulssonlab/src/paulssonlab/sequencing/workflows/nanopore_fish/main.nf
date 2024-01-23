@@ -38,6 +38,7 @@ workflow NANOPORE_FISH {
         duplex: true,
         use_dorado_duplex_pairing: false,
         pod5_chunk: true,
+        realign: true,
         publish_pod5: true,
         publish_bam: true,
         publish_fastq: false,
@@ -404,7 +405,7 @@ workflow NANOPORE_FISH {
     map_call_process(CAT_DUPLEX_FASTQ,
         ch_fastq_to_combine,
         ["fastq_to_combine"],
-        [id: { fastq_to_combine, meta -> fastq_to_combine[1] }],
+        [id: { fastq_to_combine, meta -> fastq_to_combine[1].name }],
         "fastq_to_combine",
         ["fastq"],
         "_CAT_DUPLEX_FASTQ") { fastq_to_combine, meta -> [fastq_to_combine] }
@@ -424,10 +425,10 @@ workflow NANOPORE_FISH {
         map_call_process(GRAPHALIGNER_GROUPING_DUPLEX,
             it,
             ["fastq_duplex", "gfa_grouping", "graphaligner_args"],
-            [id: { fastq, meta -> fastq.name.replaceFirst(/\.fastq\.gz$/, "") }],
-            "fastq",
+            [id: { fastq_duplex, meta -> fastq_duplex.name.replaceFirst(/\.fastq\.gz$/, "") }],
+            "fastq_duplex",
             ["gaf_grouping_duplex"],
-            "_GRAPHALIGNER_GROUPING_DUPLEX") { fastq, meta -> [fastq, meta.gfa_grouping] }
+            "_GRAPHALIGNER_GROUPING_DUPLEX") { fastq_duplex, meta -> [fastq_duplex, meta.gfa_grouping] }
     }
     .set { ch_did_graphaligner_grouping_duplex }
     ch_did_graphaligner_grouping_duplex.map {
@@ -442,10 +443,15 @@ workflow NANOPORE_FISH {
     map_call_process(CAT_DUPLEX_GAF,
         ch_gaf_to_combine,
         ["gaf_to_combine"],
-        [id: { gaf_to_combine, meta -> gaf_to_combine[1] }],
+        [id: { gaf_to_combine, meta -> gaf_to_combine[1].name }],
         "gaf_to_combine",
         ["gaf_grouping"],
         "_CAT_DUPLEX_GAF") { gaf_to_combine, meta -> [gaf_to_combine] }
+    .set { ch_combined_gaf }
+    ch_combined_gaf.map {
+        // bam, gaf -> [(bam, gaf), ...]
+        [*:it, bam_and_gaf: [it.bam, it.gaf_grouping].transpose()]
+    }
     .set { ch_did_nondorado_duplex_pairing }
     // end of use_dorado_duplex_pairing = false
     ch_do_nondorado_duplex_pairing.no.mix(ch_did_nondorado_duplex_pairing)
@@ -623,9 +629,14 @@ workflow NANOPORE_FISH {
             "_JOIN_GAF_VARIANTS") { consensus_and_gaf, meta -> [consensus_and_gaf[0], consensus_and_gaf[1]] }
     }
     .set { ch_join_gaf_variants }
+    ch_join_gaf_variants.branch {
+        yes: it["realign"]
+        no: true
+    }
+    .set { ch_do_realign }
     // bin/realign.py --gfa full.gfa out3.arrow out3_realigned.arrow
     map_call_process(REALIGN,
-        ch_join_gaf_variants,
+        ch_do_realign.yes,
         ["join_gaf_variants_output", "gfa_variants", "realign_args", "tabular_format"],
         [
             id: { join_gaf_variants_output, meta -> join_gaf_variants_output.baseName },
@@ -646,7 +657,8 @@ workflow NANOPORE_FISH {
             }
         }
     }
-    ch_did_realign.mix(ch_input_type.realign.map { [*:it, realign_output: it.realign_input] })
+    ch_did_realign.mix(ch_input_type.realign.map { [*:it, realign_output: it.realign_input] },
+                       ch_do_realign.no)
     .set { ch_realign }
     // bin/join_gaf.py "*.arrow" combined.arrow
     // bin/extract_segments.py --path-col consensus_path --cigar-col realign_cg --gfa full.gfa realigned3.arrow realigned3_extracted.arrow
