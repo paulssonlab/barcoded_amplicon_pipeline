@@ -49,7 +49,7 @@ def prepare_reads(
             df = pl.concat([pl.scan_ipc(f) for f in input_filename])
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename])
-        df = prepare_reads(df, forward_segments, endpoints)
+        df = _prepare_reads(df, forward_segments, endpoints)
         df = df.collect()
         if output_format == "arrow":
             df.write_ipc(output_filename)
