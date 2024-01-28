@@ -93,18 +93,17 @@ workflow NANOPORE_FISH {
             graphaligner_variants_args: it.get("graphaligner_args"),
             join_gaf_grouping_args: it.get("join_gaf_args"),
             join_gaf_variants_args: it.get("join_gaf_args"),
-            *:it
+            *:it,
+            basecalling_with_nondorado_duplex_pairing: it["basecall"] && it["duplex"] && !it["use_dorado_duplex_pairing"],
         ]
         if (it.get("pod5_chunk") && ([it.get("pod5_chunk_files"), it.get("pod5_chunk_bytes")].collect { v -> v ? 1 : 0 }.sum() != 1)) {
             throw new Exception("exactly one of pod5_chunk_files or pod5_chunk_bytes must be specified if pod5_chunk=true")
         }
-        if (it["align"]) {
-            if (!it.get("gfa_grouping")) {
-                throw new Exception("gfa or gfa_grouping must be specified if aligning")
-            }
-            if (!it.get("gfa_variants")) {
-                throw new Exception("gfa or gfa_variants must be specified if aligning")
-            }
+        if (!it.get("gfa_grouping")) {
+            throw new Exception("gfa or gfa_grouping must be specified")
+        }
+        if ((it["output"] in ["extract_segments"]) && !it.get("gfa_variants")) {
+            throw new Exception("gfa or gfa_variants must be specified for output=extract_segments")
         }
         it
     }
@@ -307,7 +306,7 @@ workflow NANOPORE_FISH {
     ch_converted_bam_to_fastq.mix(ch_converted_fastq_to_bam)
     .set { ch_bam_and_fastq }
     ch_bam_and_fastq.branch {
-        no: it["output"] == "basecaller"
+        no: (it["output"] == "basecaller") && !it["basecalling_with_nondorado_duplex_pairing"]
         yes: true
     }
     .set { ch_process_basecalled_reads }
@@ -328,7 +327,7 @@ workflow NANOPORE_FISH {
     }
     .set { ch_bam_and_gaf }
     ch_bam_and_gaf.branch {
-        yes: it["basecall"] && it["duplex"] && !it["use_dorado_duplex_pairing"]
+        yes: it["basecalling_with_nondorado_duplex_pairing"]
         no: true
     }
     .set { ch_do_nondorado_duplex_pairing }
@@ -418,8 +417,13 @@ workflow NANOPORE_FISH {
             }
         }
     }
+    ch_fastq_combined.branch {
+        no: it["output"] == "basecaller"
+        yes: true
+    }
+    .set { ch_process_basecalled_duplex_reads }
     // GraphAligner
-    with_keys(ch_fastq_combined, [graphaligner_args: { it.graphaligner_grouping_args }]) {
+    with_keys(ch_process_basecalled_duplex_reads.yes, [graphaligner_args: { it.graphaligner_grouping_args }]) {
         map_call_process(GRAPHALIGNER_GROUPING_DUPLEX,
             it,
             ["fastq_duplex", "gfa_grouping", "graphaligner_args"],
@@ -684,6 +688,7 @@ workflow NANOPORE_FISH {
     }
     ch_extract_segments.mix(ch_process_pod5.no,
                             ch_process_basecalled_reads.no,
+                            ch_process_basecalled_duplex_reads.no,
                             ch_process_consensus.no)
         .set { samples }
 
