@@ -687,8 +687,6 @@ workflow NANOPORE_FISH {
                             ch_process_consensus.no)
         .set { samples }
 
-    samples.view()
-
     emit:
     samples
 }
