@@ -203,12 +203,17 @@ def prepare_reads(df, forward_segments, endpoints):
 
 
 def compute_depth(df):
-    return df.with_columns(
-        pl.col("is_duplex").sum().over("path").alias("duplex_depth"),
-        pl.count().over("path").alias("depth"),
-    ).with_columns(
-        (pl.col("depth") - pl.col("duplex_depth")).alias("simplex_depth"),
-    )
+    df = df.with_columns(pl.col("path").len().over("path").alias("depth"))
+    if "dx" in df.columns:
+        df = df.with_columns(
+            (pl.col("dx") == 1).sum().over("path").alias("duplex_depth"),
+            (pl.col("dx") == 0)
+            .or_(pl.col("dx") == -1)
+            .sum()
+            .over("path")
+            .alias("simplex_depth"),
+        )
+    return df
 
 
 def load_pairing_data(bam_filename, gaf_filename):
@@ -284,27 +289,29 @@ def map_read_groups(df, func, max_group_size=None):
     else:
         # prefer duplex reads, longer reads
         def _limit_group(expr):
+            sort_columns = [pl.col("read_seq").str.len_bytes()]
+            if "dx" in df.columns:
+                sort_columns = ["dx", *sort_columns]
             return expr.sort_by(
-                ["is_duplex", pl.col("read_seq").str.len_bytes()],
+                sort_columns,
                 descending=[True, True],
             ).head(max_group_size)
 
+    columns = [
+        "name",
+        "read_seq",
+        "read_phred",
+        "reverse_complement",
+        "path",
+        "depth",
+    ]
+    agg_columns = ["path", "depth"]
+    if "dx" in df.columns:
+        columns = [*columns, "dx", "simplex_depth", "duplex_depth"]
+        agg_columns = [*agg_columns, "simplex_depth", "duplex_depth"]
+    df = df.select(pl.col(columns))
     return (
-        df.select(
-            pl.col(
-                "name",
-                "is_duplex",
-                "read_seq",
-                "read_phred",
-                "reverse_complement",
-                "path",
-                "depth",
-                "simplex_depth",
-                "duplex_depth",
-            )
-        )
-        .group_by("path")
-        .agg(
+        df.group_by("path").agg(
             pl.map_groups(
                 _limit_group(
                     pl.struct(
@@ -314,7 +321,7 @@ def map_read_groups(df, func, max_group_size=None):
                 func,
                 returns_scalar=True,
             ).alias("_func_output"),
-            pl.col("path", "depth", "simplex_depth", "duplex_depth").first(),
+            pl.col(agg_columns).first(),
         )
     ).unnest("_func_output")
 

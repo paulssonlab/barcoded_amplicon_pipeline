@@ -54,7 +54,8 @@ def compute_consensus_seqs(
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename])
         df = df.filter(pl.col("path").is_not_null())
-        df = df.filter(pl.col("end_to_end"))
+        if "end_to_end" in df.columns:
+            df = df.filter(pl.col("end_to_end"))
         if "is_valid" in df.columns:
             df = df.filter(pl.col("is_valid"))
         if group:
@@ -63,16 +64,10 @@ def compute_consensus_seqs(
             else:
                 hash_expr = pl.col("path").hash()
             df = df.filter(hash_expr % group[1] == group[0])
-        df = df.select(
-            pl.col(
-                "name",
-                "path",
-                "is_duplex",
-                "read_seq",
-                "read_phred",
-                "reverse_complement",
-            )
-        )
+        columns = ["name", "path", "read_seq", "read_phred", "reverse_complement"]
+        if "dx" in df.columns:
+            columns = [*columns, "dx"]
+        df = df.select(pl.col(columns))
         df = compute_depth(df)
         if min_depth:
             df = df.filter(pl.col("depth") > min_depth)
