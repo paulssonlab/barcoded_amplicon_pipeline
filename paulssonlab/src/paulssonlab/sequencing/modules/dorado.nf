@@ -25,10 +25,9 @@ process DORADO_DOWNLOAD {
 process DORADO_BASECALLER {
     tag "$meta.id"
     label "dorado_gpu"
-    //cpus 2 // TODO: useful?
-    //memory 38.GB
+    cpus 2
+    memory 20.GB
     time 90.min // TODO: adjust based on total input file size
-    errorStrategy "retry"
 
     input:
     tuple val(meta), path("pod5/?.pod5"), path(dorado_model)
@@ -60,12 +59,9 @@ process DORADO_BASECALLER {
 process DORADO_DUPLEX {
     tag "$meta.id"
     label "dorado_gpu"
-    //cpus 2 // TODO: useful?
-    //memory 38.GB
+    cpus 2
+    memory 20.GB
     time 90.min // TODO: adjust based on total input file size
-    errorStrategy "retry"
-    // scratch true
-    // stageInMode "copy"
 
     input:
     tuple val(meta), path("pod5/?.pod5"), path(dorado_model), path(dorado_duplex_model)
@@ -97,10 +93,9 @@ process DORADO_DUPLEX {
 process DORADO_DUPLEX_WITH_PAIRS {
     tag "$meta.id"
     label "dorado_duplex_only_gpu"
-    //cpus 2 // TODO: useful?
-    //memory 12.GB
+    cpus 2
+    memory 16.GB
     time 90.min // TODO: adjust based on total input file size
-    errorStrategy "retry"
 
     input:
     tuple val(meta), path("pod5/?.pod5"), path(pairs), path(dorado_model), path(dorado_duplex_model)

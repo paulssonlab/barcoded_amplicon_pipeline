@@ -28,8 +28,8 @@ process FIND_DUPLEX_PAIRS {
 process JOIN_GAF {
     tag "$meta.id"
 
-    time 30.min
-    memory 8.GB
+    time { 10.min + 40.min * (task.attempt - 1) }
+    memory { 4.GB + 4.GB * (task.attempt - 1) }
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gaf)
@@ -55,8 +55,8 @@ process JOIN_GAF {
 process PREPARE_READS {
     tag "$meta.id"
 
-    time 20.min
-    memory 12.GB
+    time { 10.min + 40.min * (task.attempt - 1) }
+    memory { 8.GB + 12.GB * (task.attempt - 1) }
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)
@@ -84,9 +84,6 @@ process PREPARE_CONSENSUS {
 
     time { 120.min + 120.min * (task.attempt - 1) }
     memory { 8.GB + 16.GB * (task.attempt - 1) }
-
-    errorStrategy "retry"
-    maxRetries 2
 
     input:
     tuple val(meta), path(input, stageAs: "input/*")
@@ -117,9 +114,6 @@ process CONSENSUS_PREPARED {
     time { 120.min + 120.min * (task.attempt - 1) }
     memory { 8.GB + 16.GB * (task.attempt - 1) }
 
-    errorStrategy "retry"
-    maxRetries 2
-
     input:
     tuple val(meta), path(input, stageAs: "input/*")
 
@@ -147,9 +141,6 @@ process CONSENSUS {
 
      time { 120.min + 120.min * (task.attempt - 1) }
     memory { 8.GB + 16.GB * (task.attempt - 1) }
-
-    errorStrategy "retry"
-    maxRetries 2
 
     input:
     tuple val(meta), path(input, stageAs: "input/*")
@@ -179,9 +170,6 @@ process REALIGN {
     time { 120.min + 120.min * (task.attempt - 1) }
     memory { 1.GB + 7.GB * (task.attempt - 1) }
 
-    errorStrategy "retry"
-    maxRetries 2
-
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)
 
@@ -208,9 +196,6 @@ process EXTRACT_SEGMENTS {
 
     time { 10.min + 60.min * (task.attempt - 1) }
     memory { 2.GB + 6.GB * (task.attempt - 1) }
-
-    errorStrategy "retry"
-    maxRetries 2
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)

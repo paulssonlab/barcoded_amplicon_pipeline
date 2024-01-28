@@ -1,8 +1,7 @@
 process POD5_MERGE {
     tag "$meta.id"
-    time 30.min
-    memory 2.GB
-    // errorStrategy "retry"
+    time { 10.min + 90.min * (task.attempt - 1) }
+    memory { 2.5.GB + 6.GB * (task.attempt - 1) }
 
     input:
     tuple val(meta), path(pod5, stageAs: "pod5/?.pod5")
@@ -48,11 +47,8 @@ process POD5_VIEW {
 
 process POD5_VIEW_AND_SUBSET {
     tag "$meta.id"
-    time 1.hour
-    memory 2.GB
-    errorStrategy "retry"
-    // scratch true
-    // stageInMode "copy"
+    time 3.hour
+    memory { 1.GB + 15.GB * (task.attempt - 1) }
 
     input:
     tuple val(meta), path(pod5, stageAs: "pod5/?.pod5")

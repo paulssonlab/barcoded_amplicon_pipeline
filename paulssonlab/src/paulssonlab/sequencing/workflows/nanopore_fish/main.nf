@@ -47,6 +47,7 @@ workflow NANOPORE_FISH {
         publish_bam: true,
         publish_fastq: false,
         publish_prepare_consensus: false,
+        publish_consensus: false,
         publish_realign: false,
         publish_extract_segments: true,
         output: "extract_segments", // possible values: "pod5", "basecaller", "consensus", "extract_segments"
@@ -54,7 +55,7 @@ workflow NANOPORE_FISH {
         samtools_import_args: "-T \"*\"",
         samtools_merge_args: "-c",
         tabular_format: "arrow",
-        graphaligner_args: "-x dbg",
+        graphaligner_args: "-x vg",
         find_duplex_pairs_args: "-x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2",
         prepare_reads_args: "-x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2",
         prepare_consensus: true,
