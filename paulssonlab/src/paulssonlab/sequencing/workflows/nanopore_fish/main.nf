@@ -25,7 +25,7 @@ include { FIND_DUPLEX_PAIRS;
 include { CAT as CAT_DUPLEX_GAF;
           CAT as CAT_DUPLEX_FASTQ } from '../../modules/util.nf'
 
-def GLOBBED_INPUTS = ["pod5_input", "bam_input", "fastq_input", "prepare_reads_input", "prepare_consensus_input", "consensus_tabular_input", "consensus_fasta_input", "realign_input"]
+def GLOBBED_INPUTS = ["pod5_input", "bam_input", "bam_simplex_for_duplex_input", "fastq_input", "prepare_reads_input", "prepare_consensus_input", "consensus_tabular_input", "consensus_fasta_input", "realign_input"]
 def REQUIRED_INPUTS = ["bam_input", "fastq_input", "prepare_reads_input", "prepare_consensus_input", "consensus_tabular_input", "realign_input"]
 
 workflow NANOPORE_FISH {
@@ -44,6 +44,7 @@ workflow NANOPORE_FISH {
         pod5_split_by: ["channel"],
         realign: true,
         publish_pod5: true,
+        publish_simplex_bam: false,
         publish_bam: true,
         publish_fastq: false,
         publish_prepare_consensus: false,
@@ -67,19 +68,28 @@ workflow NANOPORE_FISH {
     ]
     samples_in
     .map {
-        if (it.get("basecall") && !it.get("pod5_input")) {
+        if (it.bam_simplex_for_duplex_input) {
+            // allow these to be overriden by samples.toml,
+            // but raise error if they are
+            // this way params in samples.toml aren't silently ignored
+            it = [basecall: true, duplex: true, use_dorado_duplex_pairing: false, *:it]
+            if (!it.basecall || !it.duplex || it.use_dorado_duplex_pairing) {
+                throw new Exception("bam_simplex_for_duplex_input requires basecall=true, duplex=true, and use_dorado_duplex_pairing=false")
+            }
+        }
+        if (it.basecall && !it.pod5_input) {
             throw new Exception("basecalling requires pod5 input")
         }
-        if (it.get("bam_input") && it.get("fastq_input")) {
+        if (it.bam_input && it.fastq_input) {
             throw new Exception("cannot specify both bam_input and fastq_input")
         }
-        if ((!it.get("consensus_tabular_input") && it.get("consensus_fasta_input")) || (it.get("consensus_tabular_input") && !it.get("consensus_fasta_input"))) {
+        if ((!it.consensus_tabular_input && it.consensus_fasta_input) || (it.consensus_tabular_input && !it.consensus_fasta_input)) {
             throw new Exception("both consensus_tabular_input and consensus_fasta_input must be given to start pipeline from consensus step")
         }
-        if (!["basecall", *REQUIRED_INPUTS].collect { k -> it.get(k) }.any()) {
+        if (!["basecall", *REQUIRED_INPUTS].collect { k -> it[k] }.any()) {
             throw new Exception("missing any pipeline input")
         }
-        if (!(it["output"] in ["pod5", "basecaller", "consensus", "extract_segments"])) {
+        if (!(it.output in ["pod5", "basecaller", "consensus", "extract_segments"])) {
             throw new Exception("output must be one of: pod5, basecaller, consensus, extract_segments")
         }
         it
@@ -87,45 +97,46 @@ workflow NANOPORE_FISH {
     .map {
         it = [*:DEFAULT_ARGS, *:it]
         it = [
-            gfa_grouping: it.get("gfa"),
-            gfa_variants: it.get("gfa"),
-            graphaligner_grouping_args: it.get("graphaligner_args"),
-            graphaligner_variants_args: it.get("graphaligner_args"),
-            join_gaf_grouping_args: it.get("join_gaf_args"),
-            join_gaf_variants_args: it.get("join_gaf_args"),
+            gfa_grouping: it.gfa,
+            gfa_variants: it.gfa,
+            graphaligner_grouping_args: it.graphaligner_args,
+            graphaligner_variants_args: it.graphaligner_args,
+            join_gaf_grouping_args: it.join_gaf_args,
+            join_gaf_variants_args: it.join_gaf_args,
             *:it,
-            basecalling_with_nondorado_duplex_pairing: it["basecall"] && it["duplex"] && !it["use_dorado_duplex_pairing"],
+            basecalling_with_nondorado_duplex_pairing: it.basecall && it.duplex && !it.use_dorado_duplex_pairing,
         ]
-        if (it.get("pod5_chunk") && ([it.get("pod5_chunk_files"), it.get("pod5_chunk_bytes")].collect { v -> v ? 1 : 0 }.sum() != 1)) {
+        if (it.pod5_chunk && ([it.pod5_chunk_files, it.pod5_chunk_bytes].collect { v -> v ? 1 : 0 }.sum() != 1)) {
             throw new Exception("exactly one of pod5_chunk_files or pod5_chunk_bytes must be specified if pod5_chunk=true")
         }
-        if (!it.get("gfa_grouping")) {
+        if (!it.gfa_grouping) {
             throw new Exception("gfa or gfa_grouping must be specified")
         }
-        if ((it["output"] in ["extract_segments"]) && !it.get("gfa_variants")) {
+        if ((it.output in ["extract_segments"]) && !it.gfa_variants) {
             throw new Exception("gfa or gfa_variants must be specified for output=extract_segments")
         }
         it
     }
     .branch {
-        pod5: it.get("basecall")
-        realign: it.get("realign_input")
-        consensus: it.get("consensus_tabular_input")
-        prepare_consensus: it.get("prepare_consensus_input")
-        prepare_reads: it.get("prepare_reads_input")
-        bam: it.get("bam_input")
-        fastq: it.get("fastq_input")
+        bam_simplex_for_duplex: it.bam_simplex_for_duplex_input
+        pod5: it.basecall
+        realign: it.realign_input
+        consensus: it.consensus_tabular_input
+        prepare_consensus: it.prepare_consensus_input
+        prepare_reads: it.prepare_reads_input
+        bam: it.bam_input
+        fastq: it.fastq_input
     }
     .set { ch_input_type }
     ch_input_type.pod5.branch {
-        yes: it["pod5_chunk"]
+        yes: it.pod5_chunk
         no: true
     }
     .set { ch_do_pod5_chunk }
     ch_do_pod5_chunk.yes.map {
-        [*:it, pod5_input_chunked: chunk_files(it["pod5_input"],
-                                               it.get("pod5_chunk_files"),
-                                               it.get("pod5_chunk_bytes"))
+        [*:it, pod5_input_chunked: chunk_files(it.pod5_input,
+                                               it.pod5_chunk_files,
+                                               it.pod5_chunk_bytes)
         ]
     }
     .set { ch_pod5_chunked }
@@ -138,17 +149,17 @@ workflow NANOPORE_FISH {
                      "_POD5_MERGE") { pod5, meta -> [pod5] }
     .set { ch_pod5_merged }
     ch_pod5_merged.mix(ch_do_pod5_chunk.no.map {
-            [*:it, pod5_to_split: it.get("pod5_input")]
+            [*:it, pod5_to_split: it.pod5_input]
         } )
     .branch {
-        yes: it["pod5_split"]
+        yes: it.pod5_split
         no: true
     }
     .set { ch_do_pod5_split }
     ch_do_pod5_split.yes.map {
         [*:it,
-            pod5_view_args: "--include \"${['read_id', *it.get('pod5_split_by')].join(',')}\" ${it.get('pod5_view_args') ?: ''}",
-            pod5_subset_args: "--columns ${it.get('pod5_split_by').join(' ')} ${it.get('pod5_subset_args') ?: ''}"]
+            pod5_view_args: "--include \"${['read_id', *it['pod5_split_by']].join(',')}\" ${it['pod5_view_args'] ?: ''}",
+            pod5_subset_args: "--columns ${it['pod5_split_by'].join(' ')} ${it['pod5_subset_args'] ?: ''}"]
     }
     .set { ch_to_pod5_split }
     map_call_process(POD5_VIEW_AND_SUBSET,
@@ -169,19 +180,19 @@ workflow NANOPORE_FISH {
     }
     .set { ch_to_pod5_split_merge }
     ch_to_pod5_split_merge.branch {
-        yes: it["pod5_chunk"]
+        yes: it.pod5_chunk
         no: true
     }
     .set { ch_do_pod5_split_chunk }
     ch_do_pod5_split_chunk.yes.map {
-        [*:it, pod5_split_to_merge: chunk_files(it["pod5_split_to_chunk"],
-                                                it.get("pod5_chunk_files"),
-                                                it.get("pod5_chunk_bytes"))
+        [*:it, pod5_split_to_merge: chunk_files(it.pod5_split_to_chunk,
+                                                it.pod5_chunk_files,
+                                                it.pod5_chunk_bytes)
         ]
     }
     .set { ch_pod5_split_chunked }
     ch_pod5_split_chunked.mix(ch_do_pod5_split_chunk.no.map {
-        [*:it, pod5_split_to_merge: it["pod5_split_to_chunk"]]
+        [*:it, pod5_split_to_merge: it.pod5_split_to_chunk]
     } )
     map_call_process(POD5_MERGE2,
                      ch_pod5_split_chunked,
@@ -193,12 +204,12 @@ workflow NANOPORE_FISH {
     .set { ch_pod5_split_merged }
     ch_pod5_split_merged
     .map {
-        [*:it, pod5: it.get("pod5_split_merged")]
+        [*:it, pod5: it.pod5_split_merged]
     }
-    .mix(ch_do_pod5_split.no.map { [*:it, pod5: it.get("pod5_to_split")] })
+    .mix(ch_do_pod5_split.no.map { [*:it, pod5: it.pod5_to_split] })
     .set { ch_pod5 }
     ch_pod5.subscribe {
-        if (it["publish_pod5"]) {
+        if (it.publish_pod5) {
             def output_dir = file_in_dir(it.output_run_dir, "pod5")
             output_dir.mkdirs()
             it.pod5.each { output_file ->
@@ -207,26 +218,32 @@ workflow NANOPORE_FISH {
         }
     }
     ch_pod5.branch {
-        no: it["output"] == "pod5"
+        no: it.output == "pod5"
         yes: true
     }
     .set { ch_process_pod5 }
     ch_process_pod5.yes.map {
-            if (it.get("dorado_job_bytes") || it.get("dorado_jobs")) {
-                [*:it, pod5_unchunked: it["pod5"], pod5: chunk_files(it["pod5"], it.get("dorado_jobs"), it.get("dorado_job_bytes"))]
+            if (it.dorado_job_bytes || it.dorado_jobs) {
+                [*:it, pod5_unchunked: it.pod5, pod5: chunk_files(it.pod5, it.dorado_jobs, it.dorado_job_bytes)]
             } else {
                 it
             }
         }
     .set { ch_pod5_chunked }
+    ch_input_type.bam_simplex_for_duplex.map {
+        [*:it, bam: it.bam_simplex_for_duplex_input, pod5: it.pod5_input]
+    }
+    .set { ch_bam_simplex_for_duplex }
+    ch_pod5_chunked.mix(ch_bam_simplex_for_duplex)
+    .set { ch_do_dorado_download }
     call_process(DORADO_DOWNLOAD,
-        ch_pod5_chunked,
+        ch_do_dorado_download,
         ["dorado_model", "dorado_download_args"],
         [id: { it.dorado_model }],
         ["dorado_model_dir"]) { meta -> [meta.dorado_model] }
     .set { ch_dorado_model }
     ch_dorado_model.branch {
-            yes: it["duplex"]
+            yes: it.duplex
             no: true
         }
     .set { ch_do_download_duplex }
@@ -237,7 +254,8 @@ workflow NANOPORE_FISH {
         ["dorado_duplex_model_dir"]) { meta -> [meta.dorado_duplex_model] }
     .set { ch_did_download_duplex }
     ch_did_download_duplex.branch {
-        yes: it["duplex"] && it["use_dorado_duplex_pairing"]
+        bam_simplex_for_duplex: it.bam_simplex_for_duplex_input
+        yes: it.duplex && it.use_dorado_duplex_pairing
         no: true
     }
     .set { ch_do_dorado_duplex }
@@ -263,15 +281,23 @@ workflow NANOPORE_FISH {
     .set { ch_basecalled }
     // publish bam
     ch_basecalled.subscribe {
-        if (it["publish_bam"] && it["use_dorado_duplex_pairing"]) {
+        if (it.publish_bam && it.use_dorado_duplex_pairing) {
             def output_dir = file_in_dir(it.output_run_dir, "bam")
             output_dir.mkdirs()
             it.bam.collect { output_file ->
                 output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
             }
         }
+        if (it.publish_bam_simplex && !it.use_dorado_duplex_pairing) {
+            def output_dir = file_in_dir(it.output_run_dir, "bam_simplex")
+            output_dir.mkdirs()
+            it.bam.collect { output_file ->
+                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+            }
+        }
     }
-    ch_basecalled.mix(ch_input_type.bam.map { [*:it, bam: it.bam_input, basecall: false] } )
+    ch_basecalled.mix(ch_input_type.bam.map { [*:it, bam: it.bam_input, basecall: false] },
+                      ch_do_dorado_duplex.bam_simplex_for_duplex)
     .set { ch_bam }
     // use samtools to convert sam to fastq.gz
     map_call_process(SAMTOOLS_FASTQ,
@@ -284,7 +310,7 @@ workflow NANOPORE_FISH {
     .set { ch_converted_bam_to_fastq }
     // publish fastq
     ch_converted_bam_to_fastq.subscribe {
-        if (it["publish_fastq"] && it["use_dorado_duplex_pairing"]) {
+        if (it.publish_fastq && it.use_dorado_duplex_pairing) {
             def output_dir = file_in_dir(it.output_run_dir, "fastq")
             output_dir.mkdirs()
             it.fastq.collect { output_file ->
@@ -306,7 +332,7 @@ workflow NANOPORE_FISH {
     ch_converted_bam_to_fastq.mix(ch_converted_fastq_to_bam)
     .set { ch_bam_and_fastq }
     ch_bam_and_fastq.branch {
-        no: (it["output"] == "basecaller") && !it["basecalling_with_nondorado_duplex_pairing"]
+        no: (it.output == "basecaller") && !it.basecalling_with_nondorado_duplex_pairing
         yes: true
     }
     .set { ch_process_basecalled_reads }
@@ -327,7 +353,7 @@ workflow NANOPORE_FISH {
     }
     .set { ch_bam_and_gaf }
     ch_bam_and_gaf.branch {
-        yes: it["basecalling_with_nondorado_duplex_pairing"]
+        yes: it.basecalling_with_nondorado_duplex_pairing
         no: true
     }
     .set { ch_do_nondorado_duplex_pairing }
@@ -373,7 +399,7 @@ workflow NANOPORE_FISH {
     .set { ch_bam_combined }
     // publish bam
     ch_bam_combined.subscribe {
-        if (it["publish_bam"]) {
+        if (it.publish_bam) {
             def output_dir = file_in_dir(it.output_run_dir, "bam")
             output_dir.mkdirs()
             it.bam.collect { output_file ->
@@ -409,7 +435,7 @@ workflow NANOPORE_FISH {
     .set { ch_fastq_combined }
     // publish fastq
     ch_fastq_combined.subscribe {
-        if (it["publish_fastq"]) {
+        if (it.publish_fastq) {
             def output_dir = file_in_dir(it.output_run_dir, "fastq")
             output_dir.mkdirs()
             it.fastq.collect { output_file ->
@@ -418,7 +444,7 @@ workflow NANOPORE_FISH {
         }
     }
     ch_fastq_combined.branch {
-        no: it["output"] == "basecaller"
+        no: it.output == "basecaller"
         yes: true
     }
     .set { ch_process_basecalled_duplex_reads }
@@ -488,7 +514,7 @@ workflow NANOPORE_FISH {
     .set { ch_did_prepare_reads }
     // publish prepared_reads
     ch_did_prepare_reads.subscribe {
-        if (it["publish_prepare_reads"]) {
+        if (it.publish_prepare_reads) {
             def output_dir = file_in_dir(it.output_run_dir, "prepare_reads")
             output_dir.mkdirs()
             it.prepare_reads_output.collect { output_file ->
@@ -505,7 +531,7 @@ workflow NANOPORE_FISH {
     .set { ch_consensus_groups }
     // bin/consensus.py "*.arrow" --output out8.arrow --fasta out8.fasta --group 8/100 --min-depth 5 --no-phred-output (??) --method-spoa
     ch_consensus_groups.branch {
-        yes: it.get("prepare_consensus")
+        yes: it.prepare_consensus
         no: true
     }
     .set { ch_should_prepare_consensus }
@@ -524,7 +550,7 @@ workflow NANOPORE_FISH {
     .set { ch_did_prepare_consensus }
     // publish prepare_consensus
     ch_did_prepare_consensus.subscribe {
-        if (it["publish_prepare_consensus"]) {
+        if (it.publish_prepare_consensus) {
             def output_dir = file_in_dir(it.output_run_dir, "prepare_consensus")
             output_dir.mkdirs()
             it.prepare_consensus_output.collect { output_file ->
@@ -563,7 +589,7 @@ workflow NANOPORE_FISH {
     .set { ch_did_consensus }
     // publish consensus
     ch_did_consensus.subscribe {
-        if (it["publish_consensus"]) {
+        if (it.publish_consensus) {
             def output_dir = file_in_dir(it.output_run_dir, "consensus")
             output_dir.mkdirs()
             it.consensus_tabular.collect { output_file ->
@@ -586,7 +612,7 @@ workflow NANOPORE_FISH {
     }
     .set { ch_input_consensus }
     ch_did_consensus.branch {
-        no: it["output"] == "consensus"
+        no: it.output == "consensus"
         yes: true
     }
     .set { ch_process_consensus }
@@ -632,7 +658,7 @@ workflow NANOPORE_FISH {
     }
     .set { ch_join_gaf_variants }
     ch_join_gaf_variants.branch {
-        yes: it["realign"]
+        yes: it.realign
         no: true
     }
     .set { ch_do_realign }
@@ -651,7 +677,7 @@ workflow NANOPORE_FISH {
     .set { ch_did_realign }
     // publish realign
     ch_did_realign.subscribe {
-        if (it["publish_realign"]) {
+        if (it.publish_realign) {
             def output_dir = file_in_dir(it.output_run_dir, "realign")
             output_dir.mkdirs()
             it.realign_output.collect { output_file ->
@@ -678,7 +704,7 @@ workflow NANOPORE_FISH {
         .set { ch_extract_segments }
     // publish extract_segments
     ch_extract_segments.subscribe {
-        if (it["publish_extract_segments"]) {
+        if (it.publish_extract_segments) {
             def output_dir = file_in_dir(it.output_run_dir, "extract_segments")
             output_dir.mkdirs()
             it.extract_segments_output.collect { output_file ->
