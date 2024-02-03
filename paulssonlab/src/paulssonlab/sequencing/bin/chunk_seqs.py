@@ -1,10 +1,11 @@
 #!/usr/bin/env python
+import gzip
 import itertools as it
 import sys
-from math import ceil
 from pathlib import Path
 
 import click
+import dnaio
 import pysam
 
 sys.path.append(str(Path(__file__).parents[3]))
@@ -55,6 +56,8 @@ def chunk_seqs(
             output_mode = "wb"
         else:
             raise ValueError(f"invalid output format {output_format} for sam/bam input")
+        # TODO: dnaio is faster at uBAM reading than pysam/htslib
+        # switch if/when dnaio implements write support??
         input_files = (
             pysam.AlignmentFile(filename, check_sq=False)
             for filename in input_filenames
@@ -67,25 +70,61 @@ def chunk_seqs(
             num_seqs = divide_ceil(total_seqs, num_files)
         output_file = None
         header = None
-        for input_file in input_files:
-            if header is None:
-                header = input_file.header
-            input_file.reset()  # reset file cursor after .count() above
-            for seq in input_file:
-                if output_file is None:
-                    output_filename = next(output_filenames)
-                    output_file = pysam.AlignmentFile(
-                        output_filename, output_mode, header=header
-                    )
-                    seqs_written = 0
-                output_file.write(seq)
-                seqs_written += 1
-                if (num_seqs is not None and seqs_written == num_seqs) or (
-                    max_size is not None and output_filename.stat().st_size >= max_size
-                ):
-                    output_file = None
+        try:
+            for input_file in input_files:
+                if header is None:
+                    header = input_file.header
+                input_file.reset()  # reset file cursor after .count() above
+                for seq in input_file:
+                    if output_file is None:
+                        output_filename = next(output_filenames)
+                        output_file = pysam.AlignmentFile(
+                            output_filename, output_mode, header=header
+                        )
+                        seqs_written = 0
+                    output_file.write(seq)
+                    seqs_written += 1
+                    if (num_seqs is not None and seqs_written == num_seqs) or (
+                        max_size is not None
+                        and output_filename.stat().st_size >= max_size
+                    ):
+                        output_file.close()
+                        output_file = None
+        finally:
+            if output_file is not None:
+                output_file.close()
     elif input_format in [*FASTA_FORMATS, *FASTQ_FORMATS]:
-        pass
+        if output_format not in [*FASTA_FORMATS, *FASTQ_FORMATS]:
+            raise ValueError(
+                f"invalid output format {output_format} for fasta/fastq input"
+            )
+        if input_format in FASTA_FORMATS and output_format in FASTQ_FORMATS:
+            raise ValueError("cannot output fastq with fasta input")
+        input_files = (dnaio.open(filename) for filename in input_filenames)
+        if num_files is not None:
+            input_files = list(input_files)
+            total_seqs = sum(
+                1 for filename in input_filenames for _ in dnaio.open(filename)
+            )
+            num_seqs = divide_ceil(total_seqs, num_files)
+        output_file = None
+        try:
+            for input_file in input_files:
+                for seq in input_file:
+                    if output_file is None:
+                        output_filename = next(output_filenames)
+                        output_file = dnaio.open(output_filename, mode="w")
+                        seqs_written = 0
+                    output_file.write(seq)
+                    seqs_written += 1
+                    if (num_seqs is not None and seqs_written == num_seqs) or (
+                        max_size is not None and output_file._file.tell() >= max_size
+                    ):
+                        output_file.close()
+                        output_file = None
+        finally:
+            if output_file is not None:
+                output_file.close()
     else:
         raise ValueError(f"invalid input format: {input_format}")
 
