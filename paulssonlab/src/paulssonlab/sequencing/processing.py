@@ -287,14 +287,28 @@ def map_read_groups(df, func, max_group_size=None):
             return expr
 
     else:
-        # prefer duplex reads, longer reads
+
         def _limit_group(expr):
-            sort_columns = [pl.col("read_seq").str.len_bytes()]
+            sort_columns = []
+            descending = []
+            # PacBio: prefer high-accuracy CCS reads
+            if "rq" in df.columns:
+                sort_columns = ["rq", *sort_columns]
+                descending = [True, *descending]
+            # ONT: prefer high-accuracy reads
+            if "qs" in df.columns:
+                sort_columns = ["qs", *sort_columns]
+                descending = [True, *descending]
+            # prefer longer reads
+            sort_columns = [pl.col("read_seq").str.len_bytes(), *sort_columns]
+            descending = [True, *descending]
+            # ONT: prefer duplex reads
             if "dx" in df.columns:
                 sort_columns = ["dx", *sort_columns]
+                descending = [True, *descending]
             return expr.sort_by(
                 sort_columns,
-                descending=[True, True],
+                descending=descending,
             ).head(max_group_size)
 
     columns = [
