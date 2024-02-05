@@ -37,19 +37,21 @@ workflow NANOPORE_FISH {
         basecall: true,
         duplex: true,
         use_dorado_duplex_pairing: false,
-        pod5_chunk: true,
+        pod5_chunk: false,
         // pod5_chunk_files or pod5_chunk_bytes: must be specified by the user
         // dorado_job_bytes or dorado_jobs: may be specified to turn on dorado job chunking
-        pod5_split: true,
+        pod5_split: false,
         pod5_split_by: ["channel"],
         realign: true,
         publish_pod5: true,
-        publish_simplex_bam: false,
+        publish_simplex_bam: true,
         publish_bam: true,
-        publish_fastq: false,
-        publish_prepare_consensus: false,
-        publish_consensus: false,
-        publish_realign: false,
+        publish_fastq: true,
+        publish_prepare_reads: true,
+        publish_prepare_consensus: true,
+        publish_consensus: true,
+        publish_join_gaf_variants: true,
+        publish_realign: true,
         publish_extract_segments: true,
         output: "extract_segments", // possible values: "pod5", "basecaller", "consensus", "extract_segments"
         samtools_fastq_args: "-T \"*\"",
@@ -68,6 +70,7 @@ workflow NANOPORE_FISH {
     ]
     samples_in
     .map {
+        it = [*:DEFAULT_ARGS, *:it]
         if (it.bam_simplex_for_duplex_input) {
             // allow these to be overriden by samples.toml,
             // but raise error if they are
@@ -89,13 +92,18 @@ workflow NANOPORE_FISH {
         if (!["basecall", *REQUIRED_INPUTS].collect { k -> it[k] }.any()) {
             throw new Exception("missing any pipeline input")
         }
-        if (!(it.output in ["pod5", "basecaller", "consensus", "extract_segments"])) {
-            throw new Exception("output must be one of: pod5, basecaller, consensus, extract_segments")
+        if (!(it.output in ["pod5", "basecaller", "consensus", "join_gaf_variants", "extract_segments"])) {
+            throw new Exception("output must be one of: pod5, basecaller, consensus, join_gaf_variants, extract_segments")
         }
-        it
-    }
-    .map {
-        it = [*:DEFAULT_ARGS, *:it]
+        if (it.pod5_chunk && ([it.pod5_chunk_files, it.pod5_chunk_bytes].collect { v -> v ? 1 : 0 }.sum() != 1)) {
+            throw new Exception("exactly one of pod5_chunk_files or pod5_chunk_bytes must be specified if pod5_chunk=true")
+        }
+        if (!it.gfa_grouping) {
+            throw new Exception("gfa or gfa_grouping must be specified")
+        }
+        if ((it.output in ["extract_segments"]) && !it.gfa_variants) {
+            throw new Exception("gfa or gfa_variants must be specified for output=extract_segments")
+        }
         it = [
             gfa_grouping: it.gfa,
             gfa_variants: it.gfa,
@@ -106,15 +114,6 @@ workflow NANOPORE_FISH {
             *:it,
             basecalling_with_nondorado_duplex_pairing: it.basecall && it.duplex && !it.use_dorado_duplex_pairing,
         ]
-        if (it.pod5_chunk && ([it.pod5_chunk_files, it.pod5_chunk_bytes].collect { v -> v ? 1 : 0 }.sum() != 1)) {
-            throw new Exception("exactly one of pod5_chunk_files or pod5_chunk_bytes must be specified if pod5_chunk=true")
-        }
-        if (!it.gfa_grouping) {
-            throw new Exception("gfa or gfa_grouping must be specified")
-        }
-        if ((it.output in ["extract_segments"]) && !it.gfa_variants) {
-            throw new Exception("gfa or gfa_variants must be specified for output=extract_segments")
-        }
         it
     }
     .branch {
@@ -657,7 +656,21 @@ workflow NANOPORE_FISH {
             "_JOIN_GAF_VARIANTS") { consensus_and_gaf, meta -> [consensus_and_gaf[0], consensus_and_gaf[1]] }
     }
     .set { ch_join_gaf_variants }
+    ch_join_gaf_variants.subscribe {
+        if (it.publish_join_gaf_variants) {
+            def output_dir = file_in_dir(it.output_run_dir, "join_gaf_variants")
+            output_dir.mkdirs()
+            it.join_gaf_variants_output.collect { output_file ->
+                output_file.toRealPath().mklink(file_in_dir(output_dir, output_file.name), overwrite: true)
+            }
+        }
+    }
     ch_join_gaf_variants.branch {
+        no: it.output == "join_gaf_variants"
+        yes: true
+    }
+    .set { ch_process_join_gaf_variants }
+    ch_process_join_gaf_variants.yes.branch {
         yes: it.realign
         no: true
     }
@@ -715,7 +728,8 @@ workflow NANOPORE_FISH {
     ch_extract_segments.mix(ch_process_pod5.no,
                             ch_process_basecalled_reads.no,
                             ch_process_basecalled_duplex_reads.no,
-                            ch_process_consensus.no)
+                            ch_process_consensus.no,
+                            ch_process_join_gaf_variants.no)
         .set { samples }
 
     emit:
