@@ -275,6 +275,9 @@ def iter_bam_and_gaf(
                         break
             else:
                 eof = True
+            if bam_columns is None:
+                # no unaligned reads
+                return
             columns = {}
             if new_batch is None:
                 # all reads are unaligned, so we don't have a GAF schema
