@@ -9,15 +9,6 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from pyarrow import csv
 
-# SEE: http://samtools.github.io/hts-specs/SAMv1.pdf
-# and https://samtools.github.io/hts-specs/SAMtags.pdf
-# pyarrow CSV parser only supports pa.dictionary with int32 indices
-SAM_TAG_TYPES = {
-    "A": pa.dictionary(pa.int32(), pa.string()),
-    "f": pa.float32(),
-    "i": pa.int32(),
-    "Z": pa.string(),
-}
 GAF_COLUMN_TYPES = {
     "query_length": pa.uint64(),
     "query_start": pa.uint64(),
@@ -34,28 +25,72 @@ GAF_COLUMN_TYPES = {
 SAM_TAG_REGEX = re.compile(
     r"^(?P<tag>[a-zA-Z0-9]+):(?P<tag_value>A:.|f:(\+|-)?\d+(\.\d+)?|i:(\+|-)?\d+|Z:.*)$"
 )
-DEFAULT_BAM_COLUMNS = {"read_seq": pa.string(), "read_phred": pa.list_(pa.uint8())}
 DEFAULT_BAM_TAGS = {
+    # ONT
     "RG": pa.dictionary(pa.uint8(), pa.string()),
     "qs": pa.uint8(),
-    # "ns": pa.int64(),
-    # "ts": pa.int64(),
+    "ns": pa.int64(),
+    "ts": pa.int64(),
     "mx": pa.uint8(),
     "ch": pa.uint16(),
-    # "rn": pa.uint32(),
+    "rn": pa.uint32(),
     "st": pa.string(),
     "du": pa.float32(),
     "fn": pa.dictionary(pa.uint8(), pa.string()),
-    # "sm": pa.float32(),
-    # "sf": pa.float32(),
-    # "sv": pa.dictionary(pa.uint8(), pa.string()),
+    "sm": pa.float32(),
+    "sf": pa.float32(),
+    "sv": pa.dictionary(pa.uint8(), pa.string()),
     # "mv": ???,
     "dx": pa.int8(),
     "pi": pa.string(),
-    # "sp": pa.int64(),
-    # "pt": pa.int64(),
-    # "MN": pa.int64(),
+    "sp": pa.int64(),
+    "pt": pa.int64(),
+    "MN": pa.int64(),
+    # PacBio
 }
+
+# SEE: http://samtools.github.io/hts-specs/SAMv1.pdf
+# and https://samtools.github.io/hts-specs/SAMtags.pdf
+# pyarrow CSV parser only supports pa.dictionary with int32 indices
+# B,? (array) types are not used because pysam strips off the subtype
+# and only returns "B" as the type
+SAM_TAG_TYPES = {
+    "A": pa.dictionary(pa.int32(), pa.string()),
+    "C": pa.uint8(),  # char (0-255), deprecated?? I'm confused why pysam outputs this
+    "B,c": pa.list_(pa.int8()),
+    "B,C": pa.list_(pa.uint8()),
+    "B,s": pa.list_(pa.int16()),
+    "B,S": pa.list_(pa.uint16()),
+    "B,i": pa.list_(pa.int32()),
+    "B,I": pa.list_(pa.uint32()),
+    "B,f": pa.list_(pa.float32()),
+    "f": pa.float32(),
+    "i": pa.int32(),
+    "Z": pa.string(),
+}
+
+# python array.typecode to pyarrow types
+# I don't understand the difference between h/H and i/I
+SAM_TAG_ARRAY_TYPES = {
+    "b": pa.list_(pa.int8()),
+    "B": pa.list_(pa.uint8()),
+    "h": pa.list_(pa.int16()),
+    "H": pa.list_(pa.uint16()),
+    "i": pa.list_(pa.int16()),
+    "I": pa.list_(pa.uint16()),
+    "l": pa.list_(pa.int32()),
+    "L": pa.list_(pa.uint32()),
+    "f": pa.list_(pa.float32()),
+}
+
+
+def pyarrow_type_for_bam(type_, value):
+    if type_ in SAM_TAG_TYPES:
+        return SAM_TAG_TYPES[type_]
+    elif type_ == "B" and value.typecode in SAM_TAG_ARRAY_TYPES:
+        return SAM_TAG_ARRAY_TYPES[value.typecode]
+    else:
+        raise ValueError(f"unknown SAM tag type: {type_} (value: {value})")
 
 
 def parse_gaf_types(gaf_filename):
@@ -137,11 +172,17 @@ def read_gaf(gaf_filename, **kwargs):
 def iter_bam_and_gaf(
     bam_filename,
     gaf_filename,
-    tags=DEFAULT_BAM_TAGS,
+    column_types=None,
+    exclude_columns=None,
     include_unaligned=True,
     block_size=None,
     bam_index=None,
 ):
+    if column_types is None:
+        column_types = {}
+    if exclude_columns is None:
+        exclude_columns = []
+    exclude_columns = set(exclude_columns)
     if isinstance(bam_filename, pysam.AlignmentFile):
         bam = bam_filename
     else:
@@ -151,7 +192,12 @@ def iter_bam_and_gaf(
         bam.reset()  # must reset or else bam_index won't include all reads
         bam_index.build()
     aligned_read_names = set()
-    bam_types = None
+    bam_types = {}
+    if "read_seq" not in exclude_columns:
+        bam_types["read_seq"] = pa.string()
+    if "read_phred" not in exclude_columns:
+        bam_types["read_phred"] = pa.list_(pa.uint8())
+    bam_types = {**bam_types, **column_types}
     unaligned_batch_size = None
     new_batch = None
     for batch in iter_gaf(gaf_filename, block_size=block_size):
@@ -167,25 +213,26 @@ def iter_bam_and_gaf(
             except:
                 raise ValueError(f"BAM missing read '{name}', has alignment in GAF")
             aligned_read_names.add(name)
-            if bam_types is None:
-                if hasattr(tags, "items"):
-                    bam_types = tags
-                else:
-                    bam_types = {
-                        tag: SAM_TAG_TYPES[read.get_tag(tag, with_value_type=True)[1]]
-                        for tag in tags
-                    }
-                bam_types = {**DEFAULT_BAM_COLUMNS, **bam_types}
             if bam_columns is None:
                 bam_columns = {col_name: [] for col_name in bam_types.keys()}
-            bam_columns["read_seq"].append(read.query_sequence)
-            bam_columns["read_phred"].append(np.asarray(read.query_qualities))
-            for tag in tags:
-                try:
-                    tag_value = read.get_tag(tag)
-                except KeyError:
-                    tag_value = None
-                bam_columns[tag].append(tag_value)
+            appended_columns = set()
+            if "read_seq" in bam_columns:
+                bam_columns["read_seq"].append(read.query_sequence)
+                appended_columns.add("read_seq")
+            if "read_phred" in bam_columns:
+                bam_columns["read_phred"].append(np.asarray(read.query_qualities))
+                appended_columns.add("read_phred")
+            for tag, value, type_ in read.get_tags(with_value_type=True):
+                if tag in exclude_columns:
+                    continue
+                if tag in bam_columns:
+                    bam_columns[tag].append(value)
+                else:
+                    bam_columns[tag] = [None] * idx + [value]
+                    bam_types[tag] = pyarrow_type_for_bam(type_, value)
+                appended_columns.add(tag)
+            for tag in bam_columns.keys() - appended_columns:
+                bam_columns[tag].append(None)
         columns = dict(zip(batch.column_names, batch.columns))
         for col_name, col_type in bam_types.items():
             columns[col_name] = pa.array(bam_columns[col_name], col_type)
@@ -196,22 +243,33 @@ def iter_bam_and_gaf(
         bam_iter = bam.fetch(until_eof=True)
         bam_columns = None
         num_reads = 0
-        bam_types_with_name = {"name": pa.string(), **bam_types}
+        bam_types = {"name": pa.string(), **bam_types}
         eof = False
         while True:
             for read in bam_iter:
                 if read.query_name not in aligned_read_names:
                     if bam_columns is None:
-                        bam_columns = {col: [] for col in bam_types_with_name.keys()}
-                    bam_columns["name"].append(read.query_name)
-                    bam_columns["read_seq"].append(read.query_sequence)
-                    bam_columns["read_phred"].append(read.query_qualities)
-                    for tag in tags:
-                        try:
-                            tag_value = read.get_tag(tag)
-                        except KeyError:
-                            tag_value = None
-                        bam_columns[tag].append(tag_value)
+                        bam_columns = {col_name: [] for col_name in bam_types.keys()}
+                    appended_columns = set()
+                    if "read_seq" in bam_columns:
+                        bam_columns["read_seq"].append(read.query_sequence)
+                        appended_columns.add("read_seq")
+                    if "read_phred" in bam_columns:
+                        bam_columns["read_phred"].append(
+                            np.asarray(read.query_qualities)
+                        )
+                        appended_columns.add("read_phred")
+                    for tag, value, type_ in read.get_tags(with_value_type=True):
+                        if tag in exclude_columns:
+                            continue
+                        if tag in bam_columns:
+                            bam_columns[tag].append(value)
+                        else:
+                            bam_columns[tag] = [None] * idx + [value]
+                            bam_types[tag] = pyarrow_type_for_bam(type_, value)
+                        appended_columns.add(tag)
+                    for tag in bam_columns.keys() - appended_columns:
+                        bam_columns[tag].append(None)
                     num_reads += 1
                     if num_reads == unaligned_batch_size:
                         break
