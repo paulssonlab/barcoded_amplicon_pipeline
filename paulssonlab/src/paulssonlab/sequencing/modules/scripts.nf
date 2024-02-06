@@ -55,8 +55,8 @@ process JOIN_GAF {
 process PREPARE_READS {
     tag "$meta.id"
 
-    time { 10.min + 40.min * (task.attempt - 1) }
-    memory { 8.GB + 12.GB * (task.attempt - 1) }
+    time { 10.min + 50.min * (task.attempt - 1) }
+    memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)
@@ -82,7 +82,7 @@ process PREPARE_READS {
 process PREPARE_CONSENSUS {
     tag "$meta.id"
 
-    time { 120.min + 120.min * (task.attempt - 1) }
+    time 180.min
     memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     input:
@@ -111,7 +111,7 @@ process PREPARE_CONSENSUS {
 process CONSENSUS_PREPARED {
     tag "$meta.id"
 
-    time { 120.min + 120.min * (task.attempt - 1) }
+    time 180.min
     memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     input:
@@ -139,7 +139,7 @@ process CONSENSUS_PREPARED {
 process CONSENSUS {
     tag "$meta.id"
 
-     time { 120.min + 120.min * (task.attempt - 1) }
+     time 180.min
     memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     input:
