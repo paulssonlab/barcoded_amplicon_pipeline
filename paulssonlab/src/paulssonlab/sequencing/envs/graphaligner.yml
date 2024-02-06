@@ -3,5 +3,4 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - graphaligner=1.0.18
-  - seqkit=2.6.1
+  - graphaligner=1.0.19
