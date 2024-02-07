@@ -28,7 +28,7 @@ process FIND_DUPLEX_PAIRS {
 process JOIN_GAF {
     tag "$meta.id"
 
-    time { 10.min + 40.min * (task.attempt - 1) }
+    time 60.min
     memory { 4.GB + 4.GB * (task.attempt - 1) }
 
     input:
@@ -55,7 +55,7 @@ process JOIN_GAF {
 process PREPARE_READS {
     tag "$meta.id"
 
-    time { 10.min + 50.min * (task.attempt - 1) }
+    time 60.min
     memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     input:
@@ -167,7 +167,7 @@ process CONSENSUS {
 process REALIGN {
     tag "$meta.id"
 
-    time { 120.min + 120.min * (task.attempt - 1) }
+    time 120.min
     memory { 1.GB + 7.GB * (task.attempt - 1) }
 
     input:
@@ -194,7 +194,7 @@ process REALIGN {
 process EXTRACT_SEGMENTS {
     tag "$meta.id"
 
-    time { 10.min + 60.min * (task.attempt - 1) }
+    time 60.min
     memory { 2.GB + 6.GB * (task.attempt - 1) }
 
     input:
