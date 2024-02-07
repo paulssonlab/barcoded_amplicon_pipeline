@@ -1,13 +1,13 @@
 [[params]]
 #fastq_input = "fastq_pass/*.fastq.gz"
 # pod5_input = "pod5_pass/*.pod5"
-pod5_input = "pod5_pass_split/*.pod5"
+#pod5_input = "pod5_pass_split/*.pod5"
 #bam_input = "bam_pass/*.bam"
 #pod5_chunk = true
 # pod5_chunk_bytes = 10737418240 # 10 GB
 #pod5_split = true
 # pod5_split_by = ["channel", "mux"]
-basecall = true
+basecall = false
 duplex = true
 use_dorado_duplex_pairing = false
 # dorado_job_bytes = 10737418240 # 10 GB
@@ -26,4 +26,4 @@ consensus_tabular_input = "consensus/*.arrow"
 consensus_fasta_input = "consensus/*.fasta"
 publish_consensus = true
 publish_realign = true
-output = "consensus"
+#output = "consensus"

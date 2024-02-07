@@ -1,6 +1,6 @@
 [[params]]
 #fastq_input = "fastq_pass/*.fastq.gz"
-bam_input = "bam_pass/*.bam"
+#bam_input = "bam_pass/*.bam"
 basecall = false
 #pod5_input = "pod5_pass/*.pod5"
 #pod5_input = "pod5_pass_split/*.pod5"
@@ -22,8 +22,8 @@ gfa_variants = "references/pLIB430-435.gfa"
 consensus_args = "--method abpoa --no-phred-output --min-depth 3"
 consensus_jobs = 20
 consensus_jobs_per_align_job = 1
-#consensus_tabular_input = "consensus/*.arrow"
-#consensus_fasta_input = "consensus/*.fasta"
+consensus_tabular_input = "consensus/*.arrow"
+consensus_fasta_input = "consensus/*.fasta"
 publish_consensus = true
 publish_realign = true
-output = "consensus"
+#output = "consensus"
