@@ -151,7 +151,7 @@ def flag_valid_ont_duplex_reads(df):
         .group_by("name")
         .agg(
             pl.col("_path_matches").all(),
-            pl.col("name").len().alias("_group_size"),
+            pl.len().alias("_group_size"),
             pl.col("reverse_complement").sum().alias("_num_rc"),
             pl.col("_parent_name"),
         )
@@ -202,16 +202,21 @@ def prepare_reads(df, forward_segments, endpoints):
     return df
 
 
-def compute_depth(df):
-    df = df.with_columns(pl.col("path").len().over("path").alias("depth"))
+def compute_depth(df, prefix=None, suffix=None):
+    if prefix is None:
+        prefix = ""
+    if suffix is None:
+        suffix = ""
+
+    def format_column(name):
+        return f"{prefix}{name}{suffix}"
+
+    df = df.with_columns(
+        pl.col("path").len().over("path").alias(format_column("depth"))
+    )
     if "dx" in df.columns:
         df = df.with_columns(
-            (pl.col("dx") == 1).sum().over("path").alias("duplex_depth"),
-            (pl.col("dx") == 0)
-            .or_(pl.col("dx") == -1)
-            .sum()
-            .over("path")
-            .alias("simplex_depth"),
+            (pl.col("dx") == 1).sum().over("path").alias(format_column("duplex_depth")),
         )
     return df
 
@@ -317,12 +322,12 @@ def map_read_groups(df, func, max_group_size=None):
         "read_phred",
         "reverse_complement",
         "path",
-        "depth",
+        "grouping_depth",
     ]
-    agg_columns = ["path", "depth"]
+    agg_columns = ["path", "grouping_depth"]
     if "dx" in df.columns:
-        columns = [*columns, "dx", "simplex_depth", "duplex_depth"]
-        agg_columns = [*agg_columns, "simplex_depth", "duplex_depth"]
+        columns = [*columns, "dx", "grouping_duplex_depth"]
+        agg_columns = [*agg_columns, "grouping_duplex_depth"]
     df = df.select(pl.col(columns))
     return (
         df.group_by("path").agg(

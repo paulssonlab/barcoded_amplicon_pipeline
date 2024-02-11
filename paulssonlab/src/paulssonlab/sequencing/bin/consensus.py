@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 import polars as pl
+from cytoolz import compose
 
 sys.path.append(str(Path(__file__).parents[3]))
 from paulssonlab.sequencing.consensus import get_consensus_group_by
@@ -24,7 +25,6 @@ def compute_consensus_seqs(
     group=None,
     hash_column=None,
     min_depth=None,
-    min_simplex_depth=None,
     min_duplex_depth=None,
     limit_depth=None,
     method="abpoa",
@@ -68,22 +68,25 @@ def compute_consensus_seqs(
         if "dx" in df.columns:
             columns = [*columns, "dx"]
         df = df.select(pl.col(columns))
-        df = compute_depth(df)
+        if "grouping_depth" not in df.columns:
+            # don't recompute grouping_depth if we already computed it
+            df = compute_depth(df, prefix="grouping_")
         if min_depth:
-            df = df.filter(pl.col("depth") > min_depth)
-        if min_simplex_depth:
-            df = df.filter(pl.col("simplex_depth") > min_simplex_depth)
+            df = df.filter(pl.col("grouping_depth") > min_depth)
         if min_duplex_depth:
-            df = df.filter(pl.col("duplex_depth") > min_duplex_depth)
+            df = df.filter(pl.col("grouping_duplex_depth") > min_duplex_depth)
         if not skip_consensus:
             df = map_read_groups(
                 df,
-                partial(
-                    get_consensus_group_by,
-                    method=method,
-                    use_phreds=use_phreds,
-                    return_phreds=output_phreds,
-                    **consensus_kwargs,
+                compose(
+                    partial(
+                        get_consensus_group_by,
+                        method=method,
+                        use_phreds=use_phreds,
+                        return_phreds=output_phreds,
+                        **consensus_kwargs,
+                    ),
+                    partial(compute_depth, prefix="consensus_"),
                 ),
                 max_group_size=limit_depth,
             )
@@ -138,7 +141,6 @@ def _parse_group(ctx, param, value):
 @click.option("--hash-col", default="path_hash")
 @click.option("--no-hash-col", is_flag=True)
 @click.option("--min-depth", type=int)
-@click.option("--min-simplex-depth", type=int)
 @click.option("--min-duplex-depth", type=int)
 @click.option("--limit-depth", type=int, default=50)
 @click.option("--method", type=click.Choice(["abpoa", "spoa"]), default="abpoa")
@@ -158,7 +160,6 @@ def cli(
     hash_col,
     no_hash_col,
     min_depth,
-    min_simplex_depth,
     min_duplex_depth,
     limit_depth,
     method,
@@ -177,7 +178,6 @@ def cli(
         group,
         None if no_hash_col else hash_col,
         min_depth,
-        min_simplex_depth,
         min_duplex_depth,
         limit_depth,
         method,
