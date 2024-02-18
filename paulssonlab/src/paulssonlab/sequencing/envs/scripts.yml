@@ -1,0 +1,22 @@
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - awkward
+  - biopython
+  - click
+  - cytoolz
+  - dnaio
+  - gfapy
+  - networkx
+  - numba
+  - numpy
+  - parasail-python
+  - pip
+  - pip:
+      - polars-u64-idx
+  - pyarrow
+  - pysam
+  - python=3.11.8
+  - pywfa

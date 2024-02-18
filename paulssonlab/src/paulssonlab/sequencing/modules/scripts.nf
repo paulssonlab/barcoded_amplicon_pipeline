@@ -11,7 +11,7 @@ process FIND_DUPLEX_PAIRS {
     tuple val(meta), path("${meta.id}_pairs.txt")
 
     // TODO
-    conda "/home/jqs1/micromamba/envs/medaka"
+    conda "/home/jqs1/micromamba/envs/shenker-sequencing"
     // conda "${params.conda_env_dir}/scripts.yml"
 
     script:
@@ -38,7 +38,7 @@ process JOIN_GAF {
     tuple val(meta), path("${meta.id}.${meta.output_format}")
 
     // TODO
-    conda "/home/jqs1/micromamba/envs/medaka"
+    conda "/home/jqs1/micromamba/envs/shenker-sequencing"
     // conda "${params.conda_env_dir}/scripts.yml"
 
     script:
@@ -65,7 +65,7 @@ process PREPARE_READS {
     tuple val(meta), path("${meta.id}.${meta.output_format}")
 
     // TODO
-    conda "/home/jqs1/micromamba/envs/medaka"
+    conda "/home/jqs1/micromamba/envs/shenker-sequencing"
     // conda "${params.conda_env_dir}/scripts.yml"
 
     script:
@@ -92,7 +92,7 @@ process PREPARE_CONSENSUS {
     tuple val(meta), path("${meta.id}.${meta.output_format}")
 
     // TODO
-    conda "/home/jqs1/micromamba/envs/medaka"
+    conda "/home/jqs1/micromamba/envs/shenker-sequencing"
     // conda "${params.conda_env_dir}/scripts.yml"
 
     script:
@@ -121,7 +121,7 @@ process CONSENSUS_PREPARED {
     tuple val(meta), path("${meta.id}.${meta.output_format}"), path("${meta.id}.fasta")
 
     // TODO
-    conda "/home/jqs1/micromamba/envs/medaka"
+    conda "/home/jqs1/micromamba/envs/shenker-sequencing"
     // conda "${params.conda_env_dir}/scripts.yml"
 
     script:
@@ -149,7 +149,7 @@ process CONSENSUS {
     tuple val(meta), path("${meta.id}.${meta.output_format}"), path("${meta.id}.fasta")
 
     // TODO
-    conda "/home/jqs1/micromamba/envs/medaka"
+    conda "/home/jqs1/micromamba/envs/shenker-sequencing"
     // conda "${params.conda_env_dir}/scripts.yml"
 
     script:
@@ -177,7 +177,7 @@ process REALIGN {
     tuple val(meta), path("${meta.id}.${meta.output_format}")
 
     // TODO
-    conda "/home/jqs1/micromamba/envs/medaka"
+    conda "/home/jqs1/micromamba/envs/shenker-sequencing"
     // conda "${params.conda_env_dir}/scripts.yml"
 
     script:
@@ -204,7 +204,7 @@ process EXTRACT_SEGMENTS {
     tuple val(meta), path("${meta.id}.${meta.output_format}")
 
     // TODO
-    conda "/home/jqs1/micromamba/envs/medaka"
+    conda "/home/jqs1/micromamba/envs/shenker-sequencing"
     // conda "${params.conda_env_dir}/scripts.yml"
 
     script:

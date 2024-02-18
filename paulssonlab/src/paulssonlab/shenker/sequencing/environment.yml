@@ -4,8 +4,10 @@ channels:
   - bioconda
   - defaults
 dependencies:
+  - awkward
   - biopython
   - black
+  - click
   - conda
   - cytoolz
   - gfapy
@@ -18,10 +20,18 @@ dependencies:
   - matplotlib
   - networkx
   - nextflow
+  - numba
+  - numpy
   - pandas
   - pip
   - pip:
-      - pyfastx
+      # NOTE: must module load gcc/9.2.0 to build pywfa
+      - dnaio # via pip until bioconda starts building for python 3.11/3.12
+      - parasail # via pip until bioconda starts building for python 3.11/3.12
+      - polars-u64-idx
+      - pysam # via pip until bioconda starts building for python 3.11/3.12
+      - pywfa # via pip until bioconda starts building for python 3.11/3.12
   - pyarrow
   - python
   - tqdm
+  - xopen # for dnaio

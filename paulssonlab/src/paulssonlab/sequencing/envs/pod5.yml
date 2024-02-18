@@ -3,7 +3,7 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - python=3.11.7
+  - python=3.11.8
   - pip
   - pip:
     - pod5==0.3.6
