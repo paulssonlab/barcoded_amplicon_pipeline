@@ -16,7 +16,9 @@ dependencies:
   - pip
   - pip:
       - polars-u64-idx
+  - pyabpoa
   - pyarrow
   - pysam
+  - pyspoa
   - python=3.11.8
   - pywfa
