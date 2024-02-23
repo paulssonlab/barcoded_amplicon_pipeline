@@ -2,7 +2,7 @@
 basecall = false
 bam_input = "hifi_reads_chunked/*.bam"
 gfa_grouping = "references/barcode.gfa"
-gfa_variants = "references/pLIB430-435.gfa"
+gfa_variants = "references/pLIB442-447.gfa"
 consensus_args = "--method abpoa --no-phred-output --min-depth 3"
 consensus_jobs = 60
 consensus_jobs_per_align_job = 10
