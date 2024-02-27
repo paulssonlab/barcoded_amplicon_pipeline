@@ -1,6 +1,6 @@
 from collections.abc import Mapping, Sequence
 from functools import partial
-from itertools import zip_longest
+from itertools import chain, zip_longest
 from numbers import Number
 
 from cytoolz import compose, dissoc
@@ -87,11 +87,11 @@ def only(obj, msg="expecting a length-one iterable"):
 
 # FROM: https://stackoverflow.com/questions/42095393/python-map-a-function-over-recursive-iterables/42095505
 # TODO: document!!!
-def recursive_map(
+def map_recursive(
     func,
     data,
     shortcircuit=(),
-    ignore=(),
+    ignore=(str,),
     keys=False,
     max_level=None,
     predicate=None,
@@ -101,21 +101,24 @@ def recursive_map(
         if max_level == 0:
             return func(data)
         max_level -= 1
-    apply = lambda x: recursive_map(
-        func,
-        x,
-        shortcircuit=shortcircuit,
-        ignore=ignore,
-        keys=keys,
-        max_level=max_level,
-        predicate=predicate,
-        key_predicate=key_predicate,
-    )
+
+    def apply(x):
+        return map_recursive(
+            func,
+            x,
+            shortcircuit=shortcircuit,
+            ignore=ignore,
+            keys=keys,
+            max_level=max_level,
+            predicate=predicate,
+            key_predicate=key_predicate,
+        )
+
     if isinstance(data, shortcircuit):
         return func(data)
     # to avoid an infinite recursion error
-    # we need to hardcode that strs are ignored, because str[0] is a str, and hence a Sequence
-    elif isinstance(data, str) or ignore is not True and isinstance(data, ignore):
+    # we need ignore str by default, because str[0] is a str, and hence a Sequence
+    elif ignore and isinstance(data, ignore):
         return data
     elif isinstance(data, Mapping):
         if keys:
@@ -132,7 +135,16 @@ def recursive_map(
         if predicate is not None:
             values = [v for v in values if predicate(v)]
         return type(data)(values)
-    elif ignore is True or True in ignore:
-        return data
     else:
         return func(data)
+
+
+def iter_recursive(
+    data,
+):
+    if isinstance(data, Mapping):
+        return chain(iter_recursive(data.keys()), iter_recursive(data.values()))
+    if isinstance(data, Sequence):
+        return iter(data)
+    else:
+        return data
