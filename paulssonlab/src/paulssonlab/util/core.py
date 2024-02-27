@@ -144,7 +144,7 @@ def iter_recursive(
 ):
     if isinstance(data, Mapping):
         return chain(iter_recursive(data.keys()), iter_recursive(data.values()))
-    if isinstance(data, Sequence):
+    elif isinstance(data, Sequence):
         return iter(data)
     else:
-        return data
+        return iter((data,))
