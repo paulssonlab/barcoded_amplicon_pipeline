@@ -3,6 +3,7 @@ from functools import partial
 
 import polars as pl
 import pyarrow as pa
+from cytoolz import compose
 
 from paulssonlab.sequencing.align import pairwise_align
 from paulssonlab.sequencing.cigar import (
@@ -13,6 +14,10 @@ from paulssonlab.sequencing.cigar import (
 )
 from paulssonlab.sequencing.gfa import assemble_seq_from_path, gfa_name_mapping
 from paulssonlab.sequencing.io import iter_bam_and_gaf
+
+
+def categorical_list_hash(col):
+    return col.cast(pl.List(pl.String)).list.eval(pl.element().hash()).hash()
 
 
 def _reverse_segment(s):
@@ -185,7 +190,7 @@ def flag_valid_ont_duplex_reads(df):
 
 def prepare_reads(df, forward_segments, endpoints):
     df = normalize_paths(df, forward_segments)
-    df = df.with_columns(path_hash=pl.col("path").hash())
+    df = df.with_columns(path_hash=categorical_list_hash(pl.col("path")))
     df = flag_end_to_end(df, endpoints)
     df = df.with_columns(
         is_duplicate_alignment=pl.col("name").is_duplicated(),
@@ -199,25 +204,6 @@ def prepare_reads(df, forward_segments, endpoints):
             [df_valid_reads, df.filter(~pl.col("_candidate"))], how="diagonal"
         )
     df = df.select(pl.all().exclude("_candidate"))
-    return df
-
-
-def compute_depth(df, prefix=None, suffix=None):
-    if prefix is None:
-        prefix = ""
-    if suffix is None:
-        suffix = ""
-
-    def format_column(name):
-        return f"{prefix}{name}{suffix}"
-
-    df = df.with_columns(
-        pl.col("path").len().over("path").alias(format_column("depth"))
-    )
-    if "dx" in df.columns:
-        df = df.with_columns(
-            (pl.col("dx") == 1).sum().over("path").alias(format_column("duplex_depth")),
-        )
     return df
 
 
@@ -285,62 +271,77 @@ def find_duplex_pairs(df, timedelta, forward_segments, endpoints=None):
     return df_joined
 
 
-def map_read_groups(df, func, max_group_size=None):
-    if max_group_size is None:
+def compute_depth(df, over=None, prefix=None, suffix=None):
+    if prefix is None:
+        prefix = ""
+    if suffix is None:
+        suffix = ""
 
-        def _limit_group(expr):
-            return expr
+    def format_column(name):
+        return f"{prefix}{name}{suffix}"
+
+    if over is not None:
+
+        def wrap_over(expr):
+            return expr.over(over)
 
     else:
 
-        def _limit_group(expr):
-            sort_columns = []
-            descending = []
-            # PacBio: prefer high-accuracy CCS reads
-            if "rq" in df.columns:
-                sort_columns = ["rq", *sort_columns]
-                descending = [True, *descending]
-            # ONT: prefer high-accuracy reads
-            if "qs" in df.columns:
-                sort_columns = ["qs", *sort_columns]
-                descending = [True, *descending]
-            # prefer longer reads
-            sort_columns = [pl.col("read_seq").str.len_bytes(), *sort_columns]
-            descending = [True, *descending]
-            # ONT: prefer duplex reads
-            if "dx" in df.columns:
-                sort_columns = ["dx", *sort_columns]
-                descending = [True, *descending]
-            return expr.sort_by(
-                sort_columns,
-                descending=descending,
-            ).head(max_group_size)
+        def wrap_over(expr):
+            return expr
 
-    columns = [
-        "name",
-        "read_seq",
-        "read_phred",
-        "reverse_complement",
-        "path",
-        "grouping_depth",
-    ]
-    agg_columns = ["path", "grouping_depth"]
+    exprs = [wrap_over(pl.len()).alias(format_column("depth"))]
     if "dx" in df.columns:
-        columns = [*columns, "dx", "grouping_duplex_depth"]
-        agg_columns = [*agg_columns, "grouping_duplex_depth"]
-    df = df.select(pl.col(columns))
+        exprs.append(
+            wrap_over((pl.col("dx") == 1).sum()).alias(format_column("duplex_depth"))
+        )
+    return exprs
+
+
+def map_read_groups(
+    df,
+    func,
+    *agg_exprs,
+    max_group_size=None,
+    input_columns=["name", "read_seq", "read_phred", "reverse_complement"],
+):
+    def _limit_group(df, expr):
+        sort_columns = []
+        descending = []
+        # PacBio: prefer high-accuracy CCS reads
+        if "rq" in df.columns:
+            sort_columns = ["rq", *sort_columns]
+            descending = [True, *descending]
+        # ONT: prefer high-accuracy reads
+        if "qs" in df.columns:
+            sort_columns = ["qs", *sort_columns]
+            descending = [True, *descending]
+        # prefer longer reads
+        sort_columns = [pl.col("read_seq").str.len_bytes(), *sort_columns]
+        descending = [True, *descending]
+        # ONT: prefer duplex reads
+        if "dx" in df.columns:
+            sort_columns = ["dx", *sort_columns]
+            descending = [True, *descending]
+        expr = expr.sort_by(
+            sort_columns,
+            descending=descending,
+        )
+        if max_group_size is not None:
+            expr = expr.head(max_group_size)
+        return expr
+
     return (
         df.group_by("path").agg(
             pl.map_groups(
                 _limit_group(
-                    pl.struct(
-                        pl.col("name", "read_seq", "read_phred", "reverse_complement")
-                    )
+                    df,
+                    pl.struct(pl.col(input_columns)),
                 ),
-                func,
+                compose(func, lambda series: series[0].struct.unnest()),
                 returns_scalar=True,
             ).alias("_func_output"),
-            pl.col(agg_columns).first(),
+            *agg_exprs,
         )
     ).unnest("_func_output")
 

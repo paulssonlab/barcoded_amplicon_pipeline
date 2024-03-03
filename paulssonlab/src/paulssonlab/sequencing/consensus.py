@@ -161,14 +161,14 @@ def _get_consensus(
 
 
 def get_consensus(df, use_phreds=True, return_phreds=True, return_name=True, **kwargs):
-    seqs = df.struct.field("read_seq").to_list()
-    rc = df.struct.field("reverse_complement").to_arrow()
+    seqs = df["read_seq"].to_list()
+    rc = df["reverse_complement"].to_arrow()
     if use_phreds:
-        phreds = df.struct.field("read_phred").to_arrow()
+        phreds = df["read_phred"].to_arrow()
     else:
         phreds = None
     if return_name:
-        names = df.struct.field("name").to_list()
+        names = df["name"].to_list()
     else:
         names = None
     return _get_consensus(
@@ -185,7 +185,7 @@ def get_consensus_group_by(
     df, use_phreds=True, return_phreds=True, return_name=True, **kwargs
 ):
     res = get_consensus(
-        df[0],
+        df,
         use_phreds=use_phreds,
         return_phreds=return_phreds,
         return_name=return_name,

@@ -5,12 +5,15 @@ from pathlib import Path
 
 import click
 import polars as pl
-from cytoolz import compose
 
 sys.path.append(str(Path(__file__).parents[3]))
 from paulssonlab.sequencing.consensus import get_consensus_group_by
 from paulssonlab.sequencing.io import write_fastx
-from paulssonlab.sequencing.processing import compute_depth, map_read_groups
+from paulssonlab.sequencing.processing import (
+    categorical_list_hash,
+    compute_depth,
+    map_read_groups,
+)
 from paulssonlab.sequencing.util import detect_format
 from paulssonlab.util.cli import parse_kv
 
@@ -54,6 +57,8 @@ def compute_consensus_seqs(
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename])
         df = df.filter(pl.col("path").is_not_null())
+        if "is_duplicate_alignment" in df.columns:
+            df = df.filter(~pl.col("is_duplicate_alignment"))
         if "end_to_end" in df.columns:
             df = df.filter(pl.col("end_to_end"))
         if "is_valid" in df.columns:
@@ -62,7 +67,7 @@ def compute_consensus_seqs(
             if hash_column is not None and hash_column in df.columns:
                 hash_expr = pl.col(hash_column)
             else:
-                hash_expr = pl.col("path").hash()
+                hash_expr = categorical_list_hash(pl.col("path"))
             df = df.filter(hash_expr % group[1] == group[0])
         columns = ["name", "path", "read_seq", "read_phred", "reverse_complement"]
         if "dx" in df.columns:
@@ -70,24 +75,26 @@ def compute_consensus_seqs(
         df = df.select(pl.col(columns))
         if "grouping_depth" not in df.columns:
             # don't recompute grouping_depth if we already computed it
-            df = compute_depth(df, prefix="grouping_")
+            df = df.with_columns(compute_depth(df, over="path", prefix="grouping_"))
         if min_depth:
             df = df.filter(pl.col("grouping_depth") > min_depth)
         if min_duplex_depth:
             df = df.filter(pl.col("grouping_duplex_depth") > min_duplex_depth)
         if not skip_consensus:
+            agg_columns = ["path", "grouping_depth"]
+            if "grouping_duplex_depth" in df.columns:
+                agg_columns.append("grouping_duplex_depth")
             df = map_read_groups(
                 df,
-                compose(
-                    partial(
-                        get_consensus_group_by,
-                        method=method,
-                        use_phreds=use_phreds,
-                        return_phreds=output_phreds,
-                        **consensus_kwargs,
-                    ),
-                    partial(compute_depth, prefix="consensus_"),
+                partial(
+                    get_consensus_group_by,
+                    method=method,
+                    use_phreds=use_phreds,
+                    return_phreds=output_phreds,
+                    **consensus_kwargs,
                 ),
+                *compute_depth(df, prefix="consensus_"),
+                pl.col(agg_columns).first(),
                 max_group_size=limit_depth,
             )
         # TODO: try streaming?
