@@ -313,15 +313,9 @@ def map_read_groups(
             sort_columns = ["rq", *sort_columns]
             descending = [True, *descending]
         # ONT: prefer high-accuracy reads
-        if "qs" in df.columns:
+        # PacBio CCS uses the "qs" tag for something else, so ignore if "rq" is present
+        if "qs" in df.columns and "rq" not in df.columns:
             sort_columns = ["qs", *sort_columns]
-            descending = [True, *descending]
-        # prefer longer reads
-        sort_columns = [pl.col("read_seq").str.len_bytes(), *sort_columns]
-        descending = [True, *descending]
-        # ONT: prefer duplex reads
-        if "dx" in df.columns:
-            sort_columns = ["dx", *sort_columns]
             descending = [True, *descending]
         expr = expr.sort_by(
             sort_columns,
@@ -329,6 +323,8 @@ def map_read_groups(
         )
         if max_group_size is not None:
             expr = expr.head(max_group_size)
+        # prefer longer reads
+        expr = expr.sort_by(pl.col("read_seq").str.len_bytes(), descending=True)
         return expr
 
     return (

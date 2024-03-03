@@ -69,10 +69,6 @@ def compute_consensus_seqs(
             else:
                 hash_expr = categorical_list_hash(pl.col("path"))
             df = df.filter(hash_expr % group[1] == group[0])
-        columns = ["name", "path", "read_seq", "read_phred", "reverse_complement"]
-        if "dx" in df.columns:
-            columns = [*columns, "dx"]
-        df = df.select(pl.col(columns))
         if "grouping_depth" not in df.columns:
             # don't recompute grouping_depth if we already computed it
             df = df.with_columns(compute_depth(df, over="path", prefix="grouping_"))
@@ -80,10 +76,28 @@ def compute_consensus_seqs(
             df = df.filter(pl.col("grouping_depth") > min_depth)
         if min_duplex_depth:
             df = df.filter(pl.col("grouping_duplex_depth") > min_duplex_depth)
+        columns = set(
+            [
+                "name",
+                "path",
+                "read_seq",
+                "read_phred",
+                "reverse_complement",
+                "rq",
+                "qs",
+                "dx",
+                "grouping_depth",
+                "grouping_duplex_depth",
+            ]
+        ) & set(df.columns)
+        if "rq" in columns:
+            # PacBio CCS uses the "qs" tag for something else, so ignore if "rq" is present
+            columns.remove("qs")
+        df = df.select(pl.col(columns))
         if not skip_consensus:
-            agg_columns = ["path", "grouping_depth"]
-            if "grouping_duplex_depth" in df.columns:
-                agg_columns.append("grouping_duplex_depth")
+            agg_columns = set(
+                ["path", "grouping_depth", "grouping_duplex_depth"]
+            ) & set(df.columns)
             df = map_read_groups(
                 df,
                 partial(
