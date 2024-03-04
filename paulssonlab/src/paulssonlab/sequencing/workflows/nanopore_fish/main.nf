@@ -39,7 +39,9 @@ workflow NANOPORE_FISH {
         use_dorado_duplex_pairing: false,
         pod5_chunk: false,
         // pod5_chunk_files or pod5_chunk_bytes: must be specified by the user
+        pod5_chunk_bytes: 10737418240, // 10 GiB
         // dorado_job_bytes or dorado_jobs: may be specified to turn on dorado job chunking
+        dorado_job_bytes: 10737418240, // 10 GiB
         pod5_split: false,
         pod5_split_by: ["channel"],
         realign: true,
@@ -62,10 +64,11 @@ workflow NANOPORE_FISH {
         find_duplex_pairs_args: "-x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2",
         prepare_reads_args: "-x UNS9,BC:UPSTREAM,BC:JUNCTION,BC:T7_TERM,BC:SPACER2",
         prepare_consensus: true,
-        consensus_args: "--method spoa --no-phred-output --min-depth 3",
+        consensus_args: "--method abpoa --no-phred-output --min-depth 3",
         consensus_jobs: 200,
         consensus_jobs_per_align_job: 1,
         join_gaf_variants_args: "--rename-col path grouping_path --rename-gaf-col path variants_path",
+        // these are already the defaults for bin/extract_segments.py:
         //extract_segments_args: "--path-col variants_path --cigar-col realign_cg",
     ]
     samples_in
