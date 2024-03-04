@@ -53,9 +53,9 @@ def compute_consensus_seqs(
     with pl.StringCache():
         # TODO: waiting on Polars to support streaming this query
         if input_format == "arrow":
-            df = pl.concat([pl.scan_ipc(f) for f in input_filename])
+            df = pl.concat([pl.scan_ipc(f) for f in input_filename], how="diagonal")
         elif input_format == "parquet":
-            df = pl.concat([pl.scan_parquet(f) for f in input_filename])
+            df = pl.concat([pl.scan_parquet(f) for f in input_filename], how="diagonal")
         df = df.filter(pl.col("path").is_not_null())
         if "is_duplicate_alignment" in df.columns:
             df = df.filter(~pl.col("is_duplicate_alignment"))

@@ -37,9 +37,9 @@ def realign(
     gfa = Gfa.from_file(gfa_filename)
     with pl.StringCache():
         if input_format == "arrow":
-            df = pl.concat([pl.scan_ipc(f) for f in input_filename])
+            df = pl.concat([pl.scan_ipc(f) for f in input_filename], how="diagonal")
         elif input_format == "parquet":
-            df = pl.concat([pl.scan_parquet(f) for f in input_filename])
+            df = pl.concat([pl.scan_parquet(f) for f in input_filename], how="diagonal")
         df = pairwise_align_df_to_path(
             df,
             gfa,

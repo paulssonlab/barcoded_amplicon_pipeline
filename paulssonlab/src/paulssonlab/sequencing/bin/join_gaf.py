@@ -46,9 +46,13 @@ def join_reads_and_gaf(
     else:
         with pl.StringCache():
             if input_format == "arrow":
-                reads = pl.concat([pl.scan_ipc(f) for f in input_filename])
+                reads = pl.concat(
+                    [pl.scan_ipc(f) for f in input_filename], how="diagonal"
+                )
             elif input_format == "parquet":
-                reads = pl.concat([pl.scan_parquet(f) for f in input_filename])
+                reads = pl.concat(
+                    [pl.scan_parquet(f) for f in input_filename], how="diagonal"
+                )
             if rename_columns:
                 reads = reads.rename(rename_columns)
             gaf = pl.from_arrow(read_gaf(gaf_filename)).lazy()
