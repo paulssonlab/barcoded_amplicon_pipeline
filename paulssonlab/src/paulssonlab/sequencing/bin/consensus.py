@@ -92,7 +92,7 @@ def compute_consensus_seqs(
         ) & set(df.columns)
         if "rq" in columns:
             # PacBio CCS uses the "qs" tag for something else, so ignore if "rq" is present
-            columns.remove("qs")
+            columns.discard("qs")
         df = df.select(pl.col(columns))
         if not skip_consensus:
             agg_columns = set(

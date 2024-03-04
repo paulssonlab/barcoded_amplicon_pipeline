@@ -305,7 +305,11 @@ def map_read_groups(
     max_group_size=None,
     input_columns=["name", "read_seq", "read_phred", "reverse_complement"],
 ):
-    def _limit_group(df, expr):
+    # TODO: this will be slightly faster/cleaner when polars implements top_k for structs
+    # SEE: https://github.com/pola-rs/polars/issues/7043
+    # and https://stackoverflow.com/questions/76596952/how-do-i-select-the-top-k-rows-of-a-python-polars-dataframe-for-each-group
+    # and https://github.com/pola-rs/polars/issues/10054
+    def _limit_group(expr):
         sort_columns = []
         descending = []
         # PacBio: prefer high-accuracy CCS reads
@@ -323,17 +327,21 @@ def map_read_groups(
         )
         if max_group_size is not None:
             expr = expr.head(max_group_size)
-        # prefer longer reads
-        expr = expr.sort_by(pl.col("read_seq").str.len_bytes(), descending=True)
+        # we don't sort by length here because:
+        # 1) consensus.poa sorts by length already
+        # 2) there's a polars bug, this doesn't work for some reason
+        # (maybe it doesn't like multiple sort_by's in a group_by?)
+        # expr = expr.sort_by(pl.col("read_seq").str.len_bytes(), descending=True)
         return expr
 
     return (
-        df.group_by("path").agg(
+        df.group_by("path")
+        .agg(_limit_group(pl.all()))
+        .explode(pl.all().exclude("path"))
+        .group_by("path")
+        .agg(
             pl.map_groups(
-                _limit_group(
-                    df,
-                    pl.struct(pl.col(input_columns)),
-                ),
+                pl.struct(pl.col(input_columns)),
                 compose(func, lambda series: series[0].struct.unnest()),
                 returns_scalar=True,
             ).alias("_func_output"),
