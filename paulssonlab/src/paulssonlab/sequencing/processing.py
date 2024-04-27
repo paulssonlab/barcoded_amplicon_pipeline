@@ -358,6 +358,7 @@ def _pairwise_align_rows(
     dtype=None,
     align_kwargs={},
 ):
+    align_kwargs = {"cigar_as_string": True, **align_kwargs}
     paths = rows.struct.field("path")
     seqs = rows.struct.field("seq")
     return pl.Series(

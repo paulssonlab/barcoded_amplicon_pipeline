@@ -10,7 +10,7 @@ try:
 except:
     pass
 
-PARASAIL_DEFAULTS = {"gap_opening": 10, "gap_extension": 1, "match": 2, "mismatch": -1}
+PARASAIL_DEFAULTS = {"gap_opening": 10, "gap_extension": 1, "match": 1, "mismatch": -1}
 PARASAIL_DEGENERATE_KWARGS = [
     "match",
     "mismatch",
@@ -117,13 +117,13 @@ def pairwise_align(
     query,
     ref,
     method="parasail",
-    parasail_algorithm="nw",
+    parasail_algorithm="sw",
     parasail_vectorization_strategy="striped",
     parasail_solution_width="sat",
     parasail_case_sensitive=False,
     alphabet_aliases=None,
     degenerate=False,
-    cigar_as_string=True,
+    cigar_as_string=False,
     upper=True,
     **kwargs,
 ):
