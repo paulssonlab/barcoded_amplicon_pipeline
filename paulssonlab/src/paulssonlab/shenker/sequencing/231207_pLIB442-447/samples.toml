@@ -10,5 +10,5 @@ gfa_grouping = "references/barcode.gfa"
 gfa_variants = "references/pLIBxxx.gfa"
 consensus_args = "--method abpoa --no-phred-output --min-depth 3 --limit-depth 100"
 consensus_jobs = 400
-consensus_jobs_per_align_job = 2
+consensus_jobs_per_align_job = 10
 output = "consensus"

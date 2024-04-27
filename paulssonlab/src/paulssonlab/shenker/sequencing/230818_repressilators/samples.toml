@@ -1,5 +1,7 @@
 [[params]]
-bam_input = "bam_pass/*.bam"
+#bam_input = "bam_pass/*.bam"
+consensus_tabular_input = "consensus/*.arrow"
+consensus_fasta_input = "consensus/*.fasta"
 basecall = false
 #pod5_input = "pod5_pass_split/*.pod5"
 pod5_chunk = false
@@ -10,5 +12,5 @@ gfa_grouping = "references/barcode.gfa"
 gfa_variants = "references/pLIB429.gfa"
 consensus_args = "--method abpoa --no-phred-output --min-depth 3"
 consensus_jobs = 400
-consensus_jobs_per_align_job = 2
+consensus_jobs_per_align_job = 10
 output = "extract_segments"
