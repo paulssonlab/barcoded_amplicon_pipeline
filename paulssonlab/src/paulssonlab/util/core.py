@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, KeysView, Mapping, Sequence, ValuesView
 from functools import partial
 from itertools import chain, zip_longest
 from numbers import Number
@@ -118,7 +118,7 @@ def map_recursive(
         return func(data)
     # to avoid an infinite recursion error
     # we need ignore str by default, because str[0] is a str, and hence a Sequence
-    elif ignore and isinstance(data, ignore):
+    elif isinstance(data, ignore):
         return data
     elif isinstance(data, Mapping):
         if keys:
@@ -140,11 +140,18 @@ def map_recursive(
 
 
 def iter_recursive(
-    data,
+    obj,
+    ignore=(str,),
+    recurse=(tuple, list, dict, KeysView, ValuesView),
 ):
-    if isinstance(data, Mapping):
-        return chain(iter_recursive(data.keys()), iter_recursive(data.values()))
-    elif isinstance(data, Sequence):
-        return iter(data)
+    # to avoid an infinite recursion error
+    # we need ignore str by default, because str[0] is a str, and hence a Sequence
+    should_recurse = not recurse or isinstance(obj, recurse)
+    if isinstance(obj, ignore):
+        return iter((obj,))
+    elif should_recurse and isinstance(obj, Mapping):
+        return chain(iter_recursive(obj.keys()), iter_recursive(obj.values()))
+    elif should_recurse and isinstance(obj, Iterable):
+        return chain.from_iterable(iter_recursive(x) for x in obj)
     else:
-        return iter((data,))
+        return iter((obj,))
