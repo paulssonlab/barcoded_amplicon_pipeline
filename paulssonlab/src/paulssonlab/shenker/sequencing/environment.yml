@@ -10,6 +10,9 @@ dependencies:
   - click
   - conda
   - cytoolz
+  - dask
+  - dask-jobqueue
+  - distributed
   - gfapy
   - holoviews
   - hvplot
@@ -35,5 +38,6 @@ dependencies:
       - pywfa # via pip until bioconda starts building for python 3.11/3.12
   - pyarrow
   - python
+  - scipy
   - tqdm
   - xopen # for dnaio
