@@ -157,6 +157,41 @@ def iter_recursive(
         return iter((obj,))
 
 
+# FROM: https://stackoverflow.com/questions/6027558/flatten-nested-python-dictionaries-compressing-keys
+def flatten_dict(
+    d, parent_key=None, sep=None, predicate=None, lookahead=None, concatenate_keys=False
+):
+    if parent_key is None:
+        if sep is not None:
+            parent_key = ""
+        else:
+            parent_key = ()
+    items = []
+    for k, v in d.items():
+        if sep is not None:
+            new_key = parent_key + sep + str(k) if parent_key else str(k)
+        else:
+            if concatenate_keys and isinstance(k, tuple):
+                new_key = parent_key + k
+            else:
+                new_key = parent_key + (k,)
+        if isinstance(v, Mapping) and (lookahead is None or lookahead(v)):
+            items.extend(
+                flatten_dict(
+                    v,
+                    parent_key=new_key,
+                    sep=sep,
+                    predicate=predicate,
+                    lookahead=lookahead,
+                    concatenate_keys=concatenate_keys,
+                ).items()
+            )
+        else:
+            if predicate is None or predicate(k, v):
+                items.append((new_key, v))
+    return d.__class__(items)
+
+
 class ItemProxy(object):
     def __init__(self, obj, name):
         self._obj = obj
