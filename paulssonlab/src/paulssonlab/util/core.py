@@ -1,3 +1,4 @@
+import string
 from collections.abc import Iterable, KeysView, Mapping, Sequence, ValuesView
 from functools import partial
 from itertools import chain, zip_longest
@@ -20,6 +21,11 @@ def any_none(*args):
 
 def any_not_none(*args):
     return any(a is not None for a in args)
+
+
+# FROM: https://stackoverflow.com/a/53718454
+def count_placeholders(format_string):
+    return sum(1 for x in string.Formatter().parse(format_string) if x[1] is not None)
 
 
 def sign(x):
