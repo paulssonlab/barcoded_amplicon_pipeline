@@ -411,25 +411,43 @@ def pairwise_align_df_to_path(
     ).unnest("_func_output")
 
 
+def _slice_if_not_none(obj, idx):
+    if obj is not None and idx is not None:
+        return obj[idx]
+    else:
+        return None
+
+
+def _get_field(rows, name):
+    if name in rows.struct.fields:
+        return rows.struct.field(name)
+    else:
+        return None
+
+
 def _cut_cigar_rows(rows, name_to_seq=None, cut_cigar_kwargs={}, dtype=None):
     paths = rows.struct.field("path")
     cigars = rows.struct.field("cigar")
-    if "seq" in rows.struct.fields:
-        seqs = rows.struct.field("seq")
-    else:
-        seqs = None
-    if "phred" in rows.struct.fields:
-        phreds = rows.struct.field("phred")
-    else:
-        phreds = None
+    seqs = _get_field(rows, "seq")
+    phreds = _get_field(rows, "phred")
+    query_start = _get_field(rows, "query_start")
+    query_end = _get_field(rows, "query_end")
+    query_length = _get_field(rows, "query_length")
+    path_start = _get_field(rows, "path_start")
+    path_end = _get_field(rows, "path_end")
     return pl.Series(
         [
             cut_cigar(
                 decode_cigar(cigars[idx]),
                 paths[idx].to_list(),
                 name_to_seq,
-                sequence=seqs[idx] if seqs is not None else None,
+                sequence=_slice_if_not_none(seqs, idx),
                 phred=phreds[idx].to_numpy() if phreds is not None else None,
+                query_start=_slice_if_not_none(query_start, idx),
+                query_end=_slice_if_not_none(query_end, idx),
+                query_length=_slice_if_not_none(query_length, idx),
+                path_start=_slice_if_not_none(path_start, idx),
+                path_end=_slice_if_not_none(path_end, idx),
                 cigar_as_string=True,
                 **cut_cigar_kwargs,
             )
@@ -505,6 +523,13 @@ def _cut_cigar_dtype(
     return pl.Struct(dtype)
 
 
+def _include_column(columns, exclude_columns, source_columns, source_name, dest_name):
+    if source_name and source_name in source_columns:
+        columns[dest_name] = source_name
+        if exclude_columns is not None:
+            exclude_columns.append(source_name)
+
+
 def cut_cigar_df(
     df,
     gfa,
@@ -512,6 +537,11 @@ def cut_cigar_df(
     cigar_column=None,
     sequence_column=None,
     phred_column=None,
+    query_start_column=None,
+    query_end_column=None,
+    query_length_column=None,
+    path_start_column=None,
+    path_end_column=None,
     keep_full=False,
     cut_cigar_kwargs={},
 ):
@@ -524,12 +554,13 @@ def cut_cigar_df(
     else:
         exclude_columns.append(cigar_column)
     struct = dict(path=path_column, cigar=cigar_column)
-    if sequence_column and sequence_column in df.columns:
-        exclude_columns.append(sequence_column)
-        struct["seq"] = sequence_column
-    if phred_column and phred_column in df.columns:
-        struct["phred"] = phred_column
-        exclude_columns.append(phred_column)
+    _include_column(struct, exclude_columns, df.columns, sequence_column, "seq")
+    _include_column(struct, exclude_columns, df.columns, phred_column, "phred")
+    _include_column(struct, None, df.columns, query_start_column, "query_start")
+    _include_column(struct, None, df.columns, query_end_column, "query_end")
+    _include_column(struct, None, df.columns, query_length_column, "query_length")
+    _include_column(struct, None, df.columns, path_start_column, "path_start")
+    _include_column(struct, None, df.columns, path_end_column, "path_end")
     if keep_full:
         exclude_columns = []
     dtype = _cut_cigar_dtype(
