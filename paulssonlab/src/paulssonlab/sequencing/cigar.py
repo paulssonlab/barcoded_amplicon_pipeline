@@ -69,6 +69,11 @@ def cut_cigar(
     cigar,
     path,
     name_to_seq,
+    query_start=None,
+    query_end=None,
+    query_length=None,
+    path_start=None,
+    path_end=None,
     sequence=None,
     phred=None,
     segments=None,
@@ -88,6 +93,21 @@ def cut_cigar(
     if isinstance(name_to_seq, Gfa):
         name_to_seq = gfa_name_mapping(name_to_seq)
     segment_lengths = [len(name_to_seq[name]) for name in path]
+    path_length = sum(segment_lengths)
+    if path_start is not None:
+        cigar = [(CigarOp.D, path_start), *cigar]
+    if path_end is not None:
+        cigar = [*cigar, (CigarOp.D, path_length - path_end)]
+    if query_length is None and sequence is not None:
+        query_length = len(sequence)
+    if query_start is not None:
+        cigar = [(CigarOp.I, query_start), *cigar]
+    if query_end is not None:
+        if query_length is None:
+            raise ValueError("query_length is required if query_end is given")
+        cigar = [*cigar, (CigarOp.I, query_length - query_end)]
+    # zero-length ops cause problems
+    cigar = [(op, length) for op, length in cigar if length != 0]
     segment_names = [name[1:] for name in path]
     segment_rc = [name[0] == "<" for name in path]
     if separate_ends:
