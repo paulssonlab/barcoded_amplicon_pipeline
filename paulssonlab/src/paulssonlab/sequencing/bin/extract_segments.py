@@ -22,6 +22,12 @@ def extract_segments(
     cigar_column,
     sequence_column,
     phred_column,
+    query_start_column,
+    query_end_column,
+    query_length_column,
+    path_start_column,
+    path_end_column,
+    struct_name,
     keep_full,
     cut_cigar_kwargs,
 ):
@@ -48,6 +54,12 @@ def extract_segments(
             cigar_column=cigar_column,
             sequence_column=sequence_column,
             phred_column=phred_column,
+            query_start_column=query_start_column,
+            query_end_column=query_end_column,
+            query_length_column=query_length_column,
+            path_start_column=path_start_column,
+            path_end_column=path_end_column,
+            struct_name=struct_name,
             keep_full=keep_full,
             cut_cigar_kwargs=cut_cigar_kwargs,
         )
@@ -72,13 +84,18 @@ def extract_segments(
     type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
 @click.option("--path-col", default="variants_path")
-@click.option("--no-path-col", is_flag=True)
 @click.option("--cigar-col", default="realign_cg")
-@click.option("--no-cigar-col", is_flag=True)
 @click.option("--seq-col", default="consensus_seq")
 @click.option("--no-seq-col", is_flag=True)
 @click.option("--phred-col", default="consensus_phred")
 @click.option("--no-phred-col", is_flag=True)
+@click.option("--query-start-col", default="query_start")
+@click.option("--query-end-col", default="query_end")
+@click.option("--query-length-col", default="query_length")
+@click.option("--path-start-col", default="path_start")
+@click.option("--path-end-col", default="path_end")
+@click.option("--pad-alignment", is_flag=True)
+@click.option("--output-struct", default=None)
 @click.option("--keep-full/--no-keep-full", default=True)
 @click.option("-s", "--segments", multiple=True, callback=split_delimited_list)
 @click.option("--variant-sep", default="=")
@@ -97,13 +114,18 @@ def cli(
     input_format,
     output_format,
     path_col,
-    no_path_col,
     cigar_col,
-    no_cigar_col,
     seq_col,
     no_seq_col,
     phred_col,
     no_phred_col,
+    query_start_col,
+    query_end_col,
+    query_length_col,
+    path_start_col,
+    path_end_col,
+    pad_alignment,
+    output_struct,
     keep_full,
     segments,
     variant_sep,
@@ -120,10 +142,16 @@ def cli(
         output,
         input_format,
         output_format,
-        None if no_path_col else path_col,
-        None if no_cigar_col else cigar_col,
+        path_col,
+        cigar_col,
         None if no_seq_col else seq_col,
         None if no_phred_col else phred_col,
+        None if not pad_alignment else query_start_col,
+        None if not pad_alignment else query_end_col,
+        None if not pad_alignment else query_length_col,
+        None if not pad_alignment else path_start_col,
+        None if not pad_alignment else path_end_col,
+        output_struct,
         keep_full,
         dict(
             # cut_cigar will return empty output if segments is an empty list
