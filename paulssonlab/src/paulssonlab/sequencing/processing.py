@@ -350,6 +350,10 @@ def map_read_groups(
     ).unnest("_func_output")
 
 
+def _pairwise_align_row(res, score_column, cigar_column):
+    return {score_column: res["score"], cigar_column: res["cigar"]}
+
+
 def _pairwise_align_rows(
     rows,
     name_to_seq=None,
@@ -363,15 +367,14 @@ def _pairwise_align_rows(
     seqs = rows.struct.field("seq")
     return pl.Series(
         [
-            dict(
-                zip(
-                    (score_column, cigar_column),
-                    pairwise_align(
-                        seqs[idx],
-                        assemble_seq_from_path(name_to_seq, paths[idx]),
-                        **align_kwargs,
-                    ),
-                )
+            _pairwise_align_row(
+                pairwise_align(
+                    seqs[idx],
+                    assemble_seq_from_path(name_to_seq, paths[idx]),
+                    **align_kwargs,
+                ),
+                score_column,
+                cigar_column,
             )
             for idx in range(len(rows))
         ],

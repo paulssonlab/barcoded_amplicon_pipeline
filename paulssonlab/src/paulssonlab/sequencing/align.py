@@ -121,6 +121,7 @@ def pairwise_align(
     parasail_vectorization_strategy="striped",
     parasail_solution_width="sat",
     parasail_case_sensitive=False,
+    parasail_pad_cigars=True,
     alphabet_aliases=None,
     degenerate=False,
     cigar_as_string=False,
@@ -162,12 +163,24 @@ def pairwise_align(
             query, ref, gap_opening, gap_extension, substitution_matrix
         )
         score = res.score
-        cigar = _decode_parasail_cigar(
-            res.get_cigar(
-                case_sensitive=parasail_case_sensitive,
-                alphabet_aliases=alphabet_aliases,
-            ).seq
+        parasail_cigar = res.get_cigar(
+            case_sensitive=parasail_case_sensitive,
+            alphabet_aliases=alphabet_aliases,
         )
+        cigar = _decode_parasail_cigar(parasail_cigar.seq)
+        query_start = parasail_cigar.beg_query
+        query_end = res.end_query + 1
+        ref_start = parasail_cigar.beg_ref
+        ref_end = res.end_ref + 1
+        if parasail_pad_cigars:
+            if parasail_cigar.beg_ref > 0:
+                cigar = [(CigarOp.D, parasail_cigar.beg_ref), *cigar]
+            if (trailing_deletions := res.len_ref - res.end_ref - 1) > 0:
+                cigar = [*cigar, (CigarOp.D, trailing_deletions)]
+            if parasail_cigar.beg_query > 0:
+                cigar = [(CigarOp.I, parasail_cigar.beg_query), *cigar]
+            if (trailing_insertions := res.len_query - res.end_query - 1) > 0:
+                cigar = [*cigar, (CigarOp.I, trailing_insertions)]
     elif method == "pywfa":
         kwargs = {**PYWFA_DEFAULTS, **kwargs}
         class_kwargs, kwargs = pop_keys(kwargs, PYWFA_CLASS_KWARGS)
@@ -175,15 +188,26 @@ def pairwise_align(
         if kwargs:
             raise ValueError(f"unexpected kwargs: {kwargs}")
         wfa = WavefrontAligner(**class_kwargs)
-        wfa(query, ref, **call_kwargs)
-        if wfa.status != 0:
-            raise RuntimeError(f"alignment failed, pywfa returned status {wfa.status}")
+        res = wfa(query, ref, **call_kwargs)
+        if res.status != 0:
+            raise RuntimeError(f"alignment failed, pywfa returned status {res.status}")
         # WFA2-lib fixes matches to be worth 0 and mismatches/gaps/extensions have negative score (penalty)
         # SEE: https://github.com/smarco/WFA2-lib/issues/20
-        score = wfa.score
+        score = res.score
         cigar = _decode_pywfa_cigar(wfa.cigartuples)
+        query_start = res.text_start
+        query_end = res.text_end
+        ref_start = res.pattern_start
+        ref_end = res.pattern_end
     else:
         raise ValueError(f"invalid method {method}")
     if cigar_as_string:
         cigar = encode_cigar(cigar)
-    return score, cigar
+    return dict(
+        score=score,
+        cigar=cigar,
+        query_start=query_start,
+        query_end=query_end,
+        ref_start=ref_start,
+        ref_end=ref_end,
+    )
