@@ -4,6 +4,7 @@ from functools import partial
 import polars as pl
 import pyarrow as pa
 from cytoolz import compose
+from gfapy import Gfa
 
 from paulssonlab.sequencing.align import pairwise_align
 from paulssonlab.sequencing.cigar import (
@@ -440,19 +441,34 @@ def _cut_cigar_rows(rows, name_to_seq=None, cut_cigar_kwargs={}, dtype=None):
     path_end = _get_field(rows, "path_end")
     return pl.Series(
         [
-            cut_cigar(
-                decode_cigar(cigars[idx]),
-                paths[idx].to_list(),
-                name_to_seq,
-                sequence=_slice_if_not_none(seqs, idx),
-                phred=phreds[idx].to_numpy() if phreds is not None else None,
-                query_start=_slice_if_not_none(query_start, idx),
-                query_end=_slice_if_not_none(query_end, idx),
-                query_length=_slice_if_not_none(query_length, idx),
-                path_start=_slice_if_not_none(path_start, idx),
-                path_end=_slice_if_not_none(path_end, idx),
-                cigar_as_string=True,
-                **cut_cigar_kwargs,
+            (
+                cut_cigar(
+                    decode_cigar(cigars[idx]),
+                    paths[idx].to_list(),
+                    name_to_seq,
+                    sequence=_slice_if_not_none(seqs, idx),
+                    phred=phreds[idx].to_numpy() if phreds is not None else None,
+                    query_start=_slice_if_not_none(query_start, idx),
+                    query_end=_slice_if_not_none(query_end, idx),
+                    query_length=_slice_if_not_none(query_length, idx),
+                    path_start=_slice_if_not_none(path_start, idx),
+                    path_end=_slice_if_not_none(path_end, idx),
+                    cigar_as_string=True,
+                    **cut_cigar_kwargs,
+                )
+                if not any(
+                    _slice_if_not_none(x, idx) is None
+                    for x in (
+                        cigars,
+                        paths,
+                        query_start,
+                        query_end,
+                        query_length,
+                        path_start,
+                        path_end,
+                    )
+                )
+                else None
             )
             for idx in range(len(rows))
         ],
@@ -535,7 +551,7 @@ def _include_column(columns, exclude_columns, source_columns, source_name, dest_
 
 def cut_cigar_df(
     df,
-    gfa,
+    name_to_seq,
     path_column=None,
     cigar_column=None,
     sequence_column=None,
@@ -545,10 +561,12 @@ def cut_cigar_df(
     query_length_column=None,
     path_start_column=None,
     path_end_column=None,
+    struct_name=None,
     keep_full=False,
     cut_cigar_kwargs={},
 ):
-    name_to_seq = gfa_name_mapping(gfa)
+    if isinstance(name_to_seq, Gfa):
+        name_to_seq = gfa_name_mapping(name_to_seq)
     exclude_columns = []
     if path_column not in df.columns:
         raise ValueError(f"missing column {path_column}")
@@ -572,7 +590,7 @@ def cut_cigar_df(
         phred_dtype=df.schema.get(phred_column),
         **cut_cigar_kwargs,
     )
-    return df.select(
+    df = df.select(
         pl.all().exclude(exclude_columns),
         pl.struct(**struct)
         .map_batches(
@@ -584,5 +602,8 @@ def cut_cigar_df(
             ),
             return_dtype=dtype,
         )
-        .alias("_func_output"),
-    ).unnest("_func_output")
+        .alias("_func_output" if struct_name is None else struct_name),
+    )
+    if struct_name is None:
+        df = df.unnest("_func_output")
+    return df
