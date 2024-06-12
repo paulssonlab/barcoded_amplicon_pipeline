@@ -515,12 +515,10 @@ def _cut_cigar_dtype(
             segments_to_variant_type[k] = pl.Int32
         else:
             segments_to_variant_type[k] = pl.String
-    if return_variants:
-        dtype[f"{segment_name}{key_sep}variant"] = pl.String
     for segment_name in segment_names:
         if segment_name in full_to_segment_name:
             segment_name = full_to_segment_name[segment_name]
-            if return_variants:
+            if return_variants and variants[segment_name]:
                 dtype[f"{segment_name}{key_sep}variant"] = segments_to_variant_type[
                     segment_name
                 ]
