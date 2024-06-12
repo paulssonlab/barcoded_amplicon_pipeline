@@ -47,7 +47,7 @@ process POD5_VIEW {
 
 process POD5_VIEW_AND_SUBSET {
     tag "$meta.id"
-    time 3.hour
+    time 6.hour
     memory { 1.GB + 15.GB * (task.attempt - 1) }
 
     input:

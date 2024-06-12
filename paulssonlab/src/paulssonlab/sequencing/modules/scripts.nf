@@ -29,7 +29,7 @@ process JOIN_GAF {
     tag "$meta.id"
 
     time 60.min
-    memory { 4.GB + 4.GB * (task.attempt - 1) }
+    memory { 6.GB + 4.GB * (task.attempt - 1) }
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gaf)

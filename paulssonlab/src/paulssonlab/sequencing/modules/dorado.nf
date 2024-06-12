@@ -27,7 +27,7 @@ process DORADO_BASECALLER {
     label "dorado_gpu"
     cpus 2
     memory 20.GB
-    time 90.min // TODO: adjust based on total input file size
+    time 180.min // TODO: adjust based on total input file size
 
     input:
     tuple val(meta), path("pod5/?.pod5"), path(dorado_model)
@@ -61,7 +61,7 @@ process DORADO_DUPLEX {
     label "dorado_gpu"
     cpus 2
     memory 20.GB
-    time 90.min // TODO: adjust based on total input file size
+    time 180.min // TODO: adjust based on total input file size
 
     input:
     tuple val(meta), path("pod5/?.pod5"), path(dorado_model), path(dorado_duplex_model)
@@ -95,7 +95,7 @@ process DORADO_DUPLEX_WITH_PAIRS {
     label "dorado_duplex_only_gpu"
     cpus 2
     memory 16.GB
-    time 90.min // TODO: adjust based on total input file size
+    time 180.min // TODO: adjust based on total input file size
 
     input:
     tuple val(meta), path("pod5/?.pod5"), path(pairs), path(dorado_model), path(dorado_duplex_model)
