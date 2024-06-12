@@ -93,11 +93,13 @@ def compute_consensus_seqs(
         if "rq" in columns:
             # PacBio CCS uses the "qs" tag for something else, so ignore if "rq" is present
             columns.discard("qs")
+        # TODO: for some reason this select does not reorder columns according to columns
         df = df.select(pl.col(columns))
         if not skip_consensus:
-            agg_columns = set(
-                ["path", "grouping_depth", "grouping_duplex_depth"]
-            ) & set(df.columns)
+            # path is already included by group_by
+            agg_columns = set(["grouping_depth", "grouping_duplex_depth"]) & set(
+                df.columns
+            )
             df = map_read_groups(
                 df,
                 partial(
