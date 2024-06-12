@@ -95,8 +95,8 @@ workflow NANOPORE_FISH {
         if (!["basecall", *REQUIRED_INPUTS].collect { k -> it[k] }.any()) {
             throw new Exception("missing any pipeline input")
         }
-        if (!(it.output in ["pod5", "basecaller", "consensus", "join_gaf_variants", "extract_segments"])) {
-            throw new Exception("output must be one of: pod5, basecaller, consensus, join_gaf_variants, extract_segments")
+        if (!(it.output in ["pod5", "basecaller", "prepare_reads", "consensus", "join_gaf_variants", "extract_segments"])) {
+            throw new Exception("output must be one of: pod5, basecaller, prepare_reads, consensus, join_gaf_variants, extract_segments")
         }
         if (it.pod5_chunk && ([it.pod5_chunk_files, it.pod5_chunk_bytes].collect { v -> v ? 1 : 0 }.sum() != 1)) {
             throw new Exception("exactly one of pod5_chunk_files or pod5_chunk_bytes must be specified if pod5_chunk=true")
@@ -531,8 +531,13 @@ workflow NANOPORE_FISH {
     }
     ch_did_prepare_reads.mix(ch_input_type.prepare_reads.map { [*:it, prepare_reads_output: it.prepare_reads_input] })
     .set { ch_prepare_reads }
+    ch_prepare_reads.branch {
+        no: it.output == "prepare_reads"
+        yes: true
+    }
+    .set { ch_process_prepare_reads }
     // set consensus group size based on file size?
-    ch_prepare_reads.map {
+    ch_process_prepare_reads.yes.map {
         [*:it, consensus_groups: (0..<it.consensus_jobs).toList()]
     }
     .set { ch_consensus_groups }
@@ -736,6 +741,7 @@ workflow NANOPORE_FISH {
     ch_extract_segments.mix(ch_process_pod5.no,
                             ch_process_basecalled_reads.no,
                             ch_process_basecalled_duplex_reads.no,
+                            ch_process_prepare_reads.no,
                             ch_process_consensus.no,
                             ch_process_join_gaf_variants.no)
         .set { samples }
