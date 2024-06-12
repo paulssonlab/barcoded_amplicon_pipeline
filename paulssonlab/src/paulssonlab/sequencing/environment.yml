@@ -5,7 +5,7 @@ channels:
   - defaults
 dependencies:
   - black
-  - conda
+  - mamba
   - jupyterlab
   - jupyterlab_code_formatter
   - nextflow

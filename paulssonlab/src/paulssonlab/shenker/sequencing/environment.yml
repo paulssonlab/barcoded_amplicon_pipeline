@@ -8,7 +8,7 @@ dependencies:
   - biopython
   - black
   - click
-  - conda
+  - mamba
   - cytoolz
   - dask
   - dask-jobqueue
