@@ -46,7 +46,7 @@ workflow NANOPORE_FISH {
         pod5_split_by: ["channel"],
         realign: true,
         publish_pod5: true,
-        publish_simplex_bam: true,
+        publish_bam_simplex: true,
         publish_bam: true,
         publish_fastq: true,
         publish_prepare_reads: true,
