@@ -20,5 +20,5 @@ dependencies:
   - pyarrow
   - pysam
   - pyspoa
-  - python=3.12.4
+  - python=3.12.3
   - pywfa
