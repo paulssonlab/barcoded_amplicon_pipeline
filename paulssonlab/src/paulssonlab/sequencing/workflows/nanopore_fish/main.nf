@@ -101,6 +101,9 @@ workflow NANOPORE_FISH {
         if (it.pod5_chunk && ([it.pod5_chunk_files, it.pod5_chunk_bytes].collect { v -> v ? 1 : 0 }.sum() != 1)) {
             throw new Exception("exactly one of pod5_chunk_files or pod5_chunk_bytes must be specified if pod5_chunk=true")
         }
+        if (it.containsKey("pod5_chunk") && (it.containsKey("pod5_chunk_before_split") || it.containsKey("pod5_chunk_after_split"))) {
+            throw new Exception("pod5_chunk sets both pod5_chunk_before_split and pod5_chunk_after_split, specify only the former or one/both of the latter two")
+        }
         if (!it.gfa_grouping) {
             throw new Exception("gfa or gfa_grouping must be specified")
         }
@@ -114,6 +117,8 @@ workflow NANOPORE_FISH {
             graphaligner_variants_args: it.graphaligner_args,
             join_gaf_grouping_args: it.join_gaf_args,
             join_gaf_variants_args: it.join_gaf_args,
+            pod5_chunk_before_split: it.pod5_chunk,
+            pod5_chunk_after_split: it.pod5_chunk,
             *:it,
             basecalling_with_nondorado_duplex_pairing: it.basecall && it.duplex && !it.use_dorado_duplex_pairing,
         ]
@@ -131,7 +136,7 @@ workflow NANOPORE_FISH {
     }
     .set { ch_input_type }
     ch_input_type.pod5.branch {
-        yes: it.pod5_chunk
+        yes: it.pod5_chunk_before_split
         no: true
     }
     .set { ch_do_pod5_chunk }
@@ -182,7 +187,7 @@ workflow NANOPORE_FISH {
     }
     .set { ch_to_pod5_split_merge }
     ch_to_pod5_split_merge.branch {
-        yes: it.pod5_chunk
+        yes: it.pod5_chunk_after_split
         no: true
     }
     .set { ch_do_pod5_split_chunk }
