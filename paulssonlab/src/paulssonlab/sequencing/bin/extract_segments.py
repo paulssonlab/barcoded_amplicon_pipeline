@@ -9,7 +9,7 @@ from gfapy import Gfa
 sys.path.append(str(Path(__file__).parents[3]))
 from paulssonlab.sequencing.processing import cut_cigar_df
 from paulssonlab.sequencing.util import detect_format
-from paulssonlab.util.cli import parse_kv, split_delimited_list
+from paulssonlab.util.cli import split_delimited_list
 
 
 def extract_segments(
