@@ -456,18 +456,8 @@ def _cut_cigar_rows(rows, name_to_seq=None, cut_cigar_kwargs={}, dtype=None):
                     cigar_as_string=True,
                     **cut_cigar_kwargs,
                 )
-                if not any(
-                    _slice_if_not_none(x, idx) is None
-                    for x in (
-                        cigars,
-                        paths,
-                        query_start,
-                        query_end,
-                        query_length,
-                        path_start,
-                        path_end,
-                    )
-                )
+                if _slice_if_not_none(cigars, idx) is not None
+                and _slice_if_not_none(paths, idx) is not None
                 else None
             )
             for idx in range(len(rows))
@@ -541,7 +531,7 @@ def _cut_cigar_dtype(
 
 
 def _include_column(columns, exclude_columns, source_columns, source_name, dest_name):
-    if source_name and source_name in source_columns:
+    if source_name is not None and source_name in source_columns:
         columns[dest_name] = source_name
         if exclude_columns is not None:
             exclude_columns.append(source_name)
