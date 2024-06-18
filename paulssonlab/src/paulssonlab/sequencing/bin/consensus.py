@@ -100,7 +100,7 @@ def compute_consensus_seqs(
                 df = compute_divergences(
                     df, selected_segments, struct_name="extract_segments"
                 )
-                df = df.filter(pl.col("max_divergence") <= max_divergence)
+            df = df.filter(pl.col("max_divergence") <= max_divergence)
         columns = set(
             [
                 "name",
