@@ -51,7 +51,7 @@ class SampleSheetParser {
         if (!samples) {
             samples << [:] // add empty sample if sampleTable is empty
         }
-        def paramSets = sampleSheet.getOrDefault("params", [[run_path: "default"]])
+        def paramSets = sampleSheet.getOrDefault("params", [[:]])
         def tomlDefaults = sampleSheet.getOrDefault("defaults", [:])
         paramSets = paramSets.collect {
             [run_path: "default", *:tomlDefaults, *:it]
