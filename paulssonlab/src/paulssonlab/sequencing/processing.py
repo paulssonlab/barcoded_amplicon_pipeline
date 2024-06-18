@@ -409,11 +409,9 @@ def compute_depth(df, over=None, prefix=None, suffix=None):
         def wrap_over(expr):
             return expr
 
-    exprs = [wrap_over(pl.len()).alias(format_column("depth"))]
+    exprs = {format_column("depth"): wrap_over(pl.len())}
     if "dx" in df.columns:
-        exprs.append(
-            wrap_over((pl.col("dx") == 1).sum()).alias(format_column("duplex_depth"))
-        )
+        exprs[format_column("duplex_depth")] = wrap_over((pl.col("dx") == 1).sum())
     return exprs
 
 

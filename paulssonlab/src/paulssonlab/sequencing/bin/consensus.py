@@ -78,13 +78,6 @@ def compute_consensus_seqs(
             else:
                 hash_expr = categorical_list_hash(pl.col("path"))
             df = df.filter(hash_expr % group[1] == group[0])
-        if "grouping_depth" not in df.columns:
-            # don't recompute grouping_depth if we already computed it
-            df = df.with_columns(compute_depth(df, over="path", prefix="grouping_"))
-        if min_depth:
-            df = df.filter(pl.col("grouping_depth") > min_depth)
-        if min_duplex_depth:
-            df = df.filter(pl.col("grouping_duplex_depth") > min_duplex_depth)
         if max_length:
             df = df.filter(pl.col("read_seq").str.len_bytes() <= max_length)
         if max_divergence is not None:
@@ -101,6 +94,13 @@ def compute_consensus_seqs(
                     df, selected_segments, struct_name="extract_segments"
                 )
             df = df.filter(pl.col("max_divergence") <= max_divergence)
+        depth_columns = compute_depth(df, over="path", prefix="grouping_")
+        if not skip_consensus:
+            df = df.with_columns(**depth_columns)
+        if min_depth:
+            df = df.filter(depth_columns["grouping_depth"] > min_depth)
+        if min_duplex_depth and len(depth_columns) == 2:
+            df = df.filter(depth_columns["grouping_duplex_depth"] > min_duplex_depth)
         columns = set(
             [
                 "name",
