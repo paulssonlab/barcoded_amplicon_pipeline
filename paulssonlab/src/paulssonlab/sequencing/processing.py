@@ -272,7 +272,7 @@ def prepare_reads(df, forward_segments, endpoints, name_to_seq, max_divergence=N
     # --max-divergence must be specified to prepare_reads.py for that filtering to be used
     # for filtering duplex reads when use_dorado_duplex_pairing=True
     # otherwise --max-divergence need only be passed to consensus.py when computing consensus seqs
-    candidate = ~pl.col("is_primary_alignment") & pl.col("end_to_end")
+    candidate = pl.col("is_primary_alignment") & pl.col("end_to_end")
     if max_divergence is not None:
         df = compute_divergences(
             df, [s[1:] for s in forward_segments], struct_name="extract_segments"
