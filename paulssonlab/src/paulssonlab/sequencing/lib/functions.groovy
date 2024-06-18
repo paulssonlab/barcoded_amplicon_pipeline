@@ -105,11 +105,11 @@ static def chunk_files(files, max_files = 0, max_bytes = 0) {
         def chunk_size = Math.ceil(files.size / (max_files as int)) as int
         files.collate(chunk_size)
     } else if (!max_files && max_bytes) {
-        def chunks = [[]]
+        def chunks = []
         def bytes = 0
         files.each {
             def file_bytes = (it instanceof Collection) ? it*.size().sum() : it.size()
-            if (bytes + file_bytes >= max_bytes) {
+            if ((bytes + file_bytes >= max_bytes) || (chunks.size == 0)) {
                 chunks << []
                 bytes = 0
             }
