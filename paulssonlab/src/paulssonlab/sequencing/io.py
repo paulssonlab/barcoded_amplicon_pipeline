@@ -251,6 +251,8 @@ def iter_bam_and_gaf(
                     if bam_columns is None:
                         bam_columns = {col_name: [] for col_name in bam_types.keys()}
                     appended_columns = set()
+                    bam_columns["name"].append(read.query_name)
+                    appended_columns.add("name")
                     if "read_seq" in bam_columns:
                         bam_columns["read_seq"].append(read.query_sequence)
                         appended_columns.add("read_seq")
