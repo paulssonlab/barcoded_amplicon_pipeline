@@ -13,6 +13,7 @@ from paulssonlab.sequencing.gfa import (
     dag_forward_segments,
     filter_gfa,
     filter_gfa_options,
+    gfa_name_mapping,
     gfa_to_dag,
 )
 from paulssonlab.sequencing.processing import prepare_reads as _prepare_reads
@@ -29,6 +30,7 @@ def prepare_reads(
     include_prefix,
     exclude,
     exclude_prefix,
+    max_divergence,
 ):
     input_format = detect_format(
         input_format,
@@ -38,6 +40,8 @@ def prepare_reads(
     )
     output_format = detect_format(output_format, output_filename, ["arrow", "parquet"])
     gfa = gfapy.Gfa.from_file(gfa_filename)
+    # get name mapping pre-filtering
+    name_to_seq = gfa_name_mapping(gfa)
     gfa = filter_gfa(gfa, include, include_prefix, exclude, exclude_prefix)
     graph = gfa_to_dag(gfa)
     # weakly_connected_components is a generator, so only compute once
@@ -49,7 +53,9 @@ def prepare_reads(
             df = pl.concat([pl.scan_ipc(f) for f in input_filename], how="diagonal")
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename], how="diagonal")
-        df = _prepare_reads(df, forward_segments, endpoints)
+        df = _prepare_reads(
+            df, forward_segments, endpoints, name_to_seq, max_divergence
+        )
         df = df.collect()
         if output_format == "arrow":
             df.write_ipc(output_filename)
@@ -70,6 +76,7 @@ def prepare_reads(
 )
 @filter_gfa_options
 @click.option("--gfa", type=click.Path(exists=True, dir_okay=False), required=True)
+@click.option("--max-divergence", type=float)
 @click.argument("input", type=click.Path(exists=True, dir_okay=False), nargs=-1)
 @click.argument("output", type=click.Path())
 def cli(
@@ -82,6 +89,7 @@ def cli(
     include_prefix,
     exclude,
     exclude_prefix,
+    max_divergence,
 ):
     prepare_reads(
         gfa,
@@ -93,6 +101,7 @@ def cli(
         include_prefix,
         exclude,
         exclude_prefix,
+        max_divergence,
     )
 
 

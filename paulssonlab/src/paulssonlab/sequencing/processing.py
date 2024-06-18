@@ -189,15 +189,98 @@ def flag_valid_ont_duplex_reads(df):
     return df_valid
 
 
-def prepare_reads(df, forward_segments, endpoints):
+def compute_divergence(segment, col_getter=pl.col):
+    return pl.sum_horizontal(
+        col_getter(f"{segment}|{type_}").fill_null(strategy="zero")
+        for type_ in ("mismatches", "insertions", "deletions")
+    ) / pl.sum_horizontal(
+        col_getter(f"{segment}|{type_}").fill_null(strategy="zero")
+        for type_ in ("matches", "mismatches", "insertions", "deletions")
+    )
+
+
+def compute_divergences(df, segments, struct_name=None):
+    if struct_name is not None:
+        col_getter = pl.col(struct_name).struct.field
+    else:
+        col_getter = pl.col
+    cols = {
+        f"{segment}|divergence": compute_divergence(
+            segment,
+            col_getter=col_getter,
+        )
+        for segment in segments
+    }
+    if struct_name is not None:
+        df = df.with_columns(pl.col(struct_name).struct.with_fields(**cols))
+        divergence_cols = [
+            pl.col(struct_name).struct.field(f"{segment}|divergence")
+            for segment in segments
+        ]
+    else:
+        df = df.with_columns(**cols)
+        divergence_cols = [pl.col(f"{segment}|divergence") for segment in segments]
+    df = df.with_columns(max_divergence=pl.max_horizontal(*divergence_cols))
+    return df
+
+
+def unique_segments(df, col):
+    if isinstance(col, str):
+        col = pl.col(col)
+    segments = df.select(
+        col.explode()
+        .cast(pl.String)
+        .str.slice(1, None)
+        .str.split("=")
+        .list.get(0)
+        .unique()
+        .alias("segment")
+    )
+    if hasattr(segments, "collect"):
+        segments = segments.collect()
+    return segments.to_series().to_list()
+
+
+def prepare_reads(df, forward_segments, endpoints, name_to_seq, max_divergence=None):
     df = normalize_paths(df, forward_segments)
     df = df.with_columns(path_hash=categorical_list_hash(pl.col("path")))
     df = flag_end_to_end(df, endpoints)
-    df = df.with_columns(
-        is_duplicate_alignment=pl.col("name").is_duplicated(),
-    ).with_columns(
-        _candidate=(~pl.col("is_duplicate_alignment") & pl.col("end_to_end"))
+    # TODO: is there any reason to make these column names configurable?
+    df = cut_cigar_df(
+        df,
+        name_to_seq,
+        path_column="full_path",
+        cigar_column="cg",
+        # sequence_column="read_seq",
+        # phred_column="read_phred",
+        query_start_column="query_start",
+        query_end_column="query_end",
+        query_length_column="query_length",
+        path_start_column="path_start",
+        path_end_column="path_end",
+        keep_full=True,
+        struct_name="extract_segments",
+        cut_cigar_kwargs=dict(
+            key_sep="|",
+            return_indices=False,
+            return_counts=True,
+            return_cigars=False,
+            return_variants=True,
+            separate_ends=True,
+        ),
     )
+    # --max-divergence must be specified to prepare_reads.py for that filtering to be used
+    # for filtering duplex reads when use_dorado_duplex_pairing=True
+    # otherwise --max-divergence need only be passed to consensus.py when computing consensus seqs
+    candidate = ~pl.col("is_primary_alignment") & pl.col("end_to_end")
+    if max_divergence is not None:
+        df = compute_divergences(
+            df, [s[1:] for s in forward_segments], struct_name="extract_segments"
+        )
+        candidate = candidate & (pl.col("max_divergence") <= max_divergence)
+    df = df.with_columns(
+        is_primary_alignment=pl.col("name").is_first_distinct(),
+    ).with_columns(_candidate=candidate)
     # only ONT duplex reads will have dx SAM tag
     if "dx" in df.columns:
         df_valid_reads = flag_valid_ont_duplex_reads(df.filter(pl.col("_candidate")))
@@ -229,7 +312,14 @@ def load_pairing_data(bam_filename, gaf_filename):
     return pl.from_arrow(batches)
 
 
-def find_duplex_pairs(df, timedelta, forward_segments, endpoints=None):
+def find_duplex_pairs(
+    df,
+    timedelta,
+    forward_segments,
+    endpoints=None,
+    max_divergence=None,
+    name_to_seq=None,
+):
     (
         path_filter,
         _,
@@ -237,7 +327,7 @@ def find_duplex_pairs(df, timedelta, forward_segments, endpoints=None):
     ) = _segments_for_normalize_path(forward_segments)
     df = (
         df.rename({"path": "full_path"})
-        .filter(pl.col("name").is_duplicated().not_())
+        .filter(pl.col("name").is_first_distinct())  # use primary alignment
         .with_columns(
             pl.col("full_path")
             .list.set_intersection(pl.lit(path_filter, dtype=pl.List(pl.Categorical)))
@@ -254,6 +344,34 @@ def find_duplex_pairs(df, timedelta, forward_segments, endpoints=None):
         df = flag_end_to_end(df, endpoints, path_column="_path").filter(
             pl.col("end_to_end")
         )
+    if max_divergence is not None:
+        df = cut_cigar_df(
+            df,
+            name_to_seq,
+            path_column="full_path",
+            cigar_column="cg",
+            # sequence_column="read_seq",
+            # phred_column="read_phred",
+            query_start_column="query_start",
+            query_end_column="query_end",
+            query_length_column="query_length",
+            path_start_column="path_start",
+            path_end_column="path_end",
+            keep_full=True,
+            struct_name="extract_segments",
+            cut_cigar_kwargs=dict(
+                key_sep="|",
+                return_indices=False,
+                return_counts=True,
+                return_cigars=False,
+                return_variants=True,
+                separate_ends=True,
+            ),
+        )
+        df = compute_divergences(
+            df, [s[1:] for s in forward_segments], struct_name="extract_segments"
+        )
+        df = df.filter(pl.col("max_divergence") <= max_divergence)
     df_sorted = df.sort("st")
     df_endtime = df.with_columns(
         (pl.col("st") + pl.duration(seconds="du")).alias("_endtime")
@@ -322,10 +440,11 @@ def map_read_groups(
         if "qs" in df.columns and "rq" not in df.columns:
             sort_columns = ["qs", *sort_columns]
             descending = [True, *descending]
-        expr = expr.sort_by(
-            sort_columns,
-            descending=descending,
-        )
+        if sort_columns:
+            expr = expr.sort_by(
+                sort_columns,
+                descending=descending,
+            )
         if max_group_size is not None:
             expr = expr.head(max_group_size)
         # we don't sort by length here because:

@@ -121,6 +121,24 @@ def _exclude_gfa_line(line, segments):
 
 
 def filter_gfa(gfa, include=[], include_prefix=[], exclude=[], exclude_prefix=[]):
+    segments_to_delete = segments_to_filter(
+        [s.name for s in gfa.segments],
+        include=include,
+        include_prefix=include_prefix,
+        exclude=exclude,
+        exclude_prefix=exclude_prefix,
+    )
+    lines = [
+        str(line)
+        for line in gfa.lines
+        if not _exclude_gfa_line(line, segments_to_delete)
+    ]
+    return Gfa(lines)
+
+
+def segments_to_filter(
+    segments, include=[], include_prefix=[], exclude=[], exclude_prefix=[]
+):
     if isinstance(include, str):
         include = [include]
     if isinstance(include_prefix, str):
@@ -132,36 +150,41 @@ def filter_gfa(gfa, include=[], include_prefix=[], exclude=[], exclude_prefix=[]
     include = set(include)
     exclude = set(exclude)
     segments_to_delete = []
-    for segment in gfa.segments:
+    for segment in segments:
         delete = False
         if include or include_prefix:
             delete = True
-            if segment.name in include:
+            if segment in include:
                 delete = False
-            if any(segment.name.startswith(prefix) for prefix in include_prefix):
+            if any(segment.startswith(prefix) for prefix in include_prefix):
                 delete = False
-        if segment.name in exclude:
+        if segment in exclude:
             delete = True
-        if any(segment.name.startswith(prefix) for prefix in exclude_prefix):
+        if any(segment.startswith(prefix) for prefix in exclude_prefix):
             delete = True
         if delete:
             segments_to_delete.append(segment)
     segments_to_delete = set(segments_to_delete)
-    lines = [
-        str(line)
-        for line in gfa.lines
-        if not _exclude_gfa_line(line, segments_to_delete)
-    ]
-    return Gfa(lines)
+    return segments_to_delete
+
+
+def filter_segments(
+    segments, include=[], include_prefix=[], exclude=[], exclude_prefix=[]
+):
+    return set(segments) - segments_to_filter(
+        segments,
+        include=include,
+        include_prefix=include_prefix,
+        exclude=exclude,
+        exclude_prefix=exclude_prefix,
+    )
 
 
 def gfa_name_mapping(gfa):
     return {
-        f"<{name}"
-        if rc
-        else f">{name}": reverse_complement(seg.sequence)
-        if rc
-        else seg.sequence
+        f"<{name}" if rc else f">{name}": (
+            reverse_complement(seg.sequence) if rc else seg.sequence
+        )
         for name, seg in gfa._records["S"].items()
         for rc in (False, True)
     }

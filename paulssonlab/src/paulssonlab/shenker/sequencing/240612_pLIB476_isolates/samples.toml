@@ -11,7 +11,7 @@ max_divergence
 """
 
 [defaults]
-bam_input = "bam_simplex/*.bam"
+fastq_input = "pLIB476_colonies_raw-reads/*.fastq"
 basecall = false
 #pod5_input = "pod5_split/*.pod5"
 pod5_chunk = false
@@ -21,12 +21,12 @@ dorado_duplex_model = "dna_r10.4.1_e8.2_5khz_stereo@v1.3"
 gfa_grouping = "references/barcode.gfa"
 gfa_variants = "references/pLIB476jqs.gfa"
 consensus_args = "--method abpoa --no-phred-output --min-depth 3 --max-length 10000 --max-divergence ${max_divergence}"
-consensus_jobs = 100
-consensus_jobs_per_align_job = 20
+consensus_jobs = 1
+consensus_jobs_per_align_job = 1
 #output = "prepare_reads"
 find_duplex_pairs_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:Term_T7,BC:Term_T7hyb10"
 prepare_reads_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:Term_T7,BC:Term_T7hyb10"
-run_path = "max_divergence=${max_divergence}"
+run_path = "primary_max_divergence=${max_divergence}"
 
 #[[params]]
 ##bam_input = "bam_simplex/*.bam"
@@ -45,3 +45,15 @@ run_path = "max_divergence=${max_divergence}"
 #output = "prepare_reads"
 #run_path = "all_segments"
 #prepare_reads_args = ""
+
+# [[params]]
+# run_path = "dbg"
+# graphaligner_args = "-x dbg -C -1 -b 35"
+
+# [[params]]
+# run_path = "vg"
+# graphaligner_args = "-x vg"
+
+# [[params]]
+# run_path = "max_mum"
+# graphaligner_args = "--precise-clipping 0.502 --max-cluster-extend -1 --seeds-mum-count -1 --seeds-mxm-windowsize 0"

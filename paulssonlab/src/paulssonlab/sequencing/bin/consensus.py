@@ -8,11 +8,14 @@ import polars as pl
 
 sys.path.append(str(Path(__file__).parents[3]))
 from paulssonlab.sequencing.consensus import get_consensus_group_by
+from paulssonlab.sequencing.gfa import filter_gfa_options, filter_segments
 from paulssonlab.sequencing.io import write_fastx
 from paulssonlab.sequencing.processing import (
     categorical_list_hash,
     compute_depth,
+    compute_divergences,
     map_read_groups,
+    unique_segments,
 )
 from paulssonlab.sequencing.util import detect_format
 from paulssonlab.util.cli import parse_kv
@@ -30,10 +33,16 @@ def compute_consensus_seqs(
     min_depth=None,
     min_duplex_depth=None,
     limit_depth=None,
+    max_length=None,
     method="abpoa",
     use_phreds=None,
     output_phreds=None,
     consensus_kwargs={},
+    include=None,
+    include_prefix=None,
+    exclude=None,
+    exclude_prefix=None,
+    max_divergence=None,
     skip_consensus=False,
 ):
     if not input_filename:
@@ -57,8 +66,8 @@ def compute_consensus_seqs(
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename], how="diagonal")
         df = df.filter(pl.col("path").is_not_null())
-        if "is_duplicate_alignment" in df.columns:
-            df = df.filter(~pl.col("is_duplicate_alignment"))
+        if "is_primary_alignment" in df.columns:
+            df = df.filter(pl.col("is_primary_alignment"))
         if "end_to_end" in df.columns:
             df = df.filter(pl.col("end_to_end"))
         if "is_valid" in df.columns:
@@ -76,6 +85,22 @@ def compute_consensus_seqs(
             df = df.filter(pl.col("grouping_depth") > min_depth)
         if min_duplex_depth:
             df = df.filter(pl.col("grouping_duplex_depth") > min_duplex_depth)
+        if max_length:
+            df = df.filter(pl.col("read_seq").str.len_bytes() <= max_length)
+        if max_divergence is not None:
+            if "max_divergence" not in df.columns:
+                all_segments = unique_segments(df, pl.col("path"))
+                selected_segments = filter_segments(
+                    all_segments,
+                    include=include,
+                    include_prefix=include_prefix,
+                    exclude=exclude,
+                    exclude_prefix=exclude_prefix,
+                )
+                df = compute_divergences(
+                    df, selected_segments, struct_name="extract_segments"
+                )
+                df = df.filter(pl.col("max_divergence") <= max_divergence)
         columns = set(
             [
                 "name",
@@ -89,7 +114,10 @@ def compute_consensus_seqs(
                 "grouping_depth",
                 "grouping_duplex_depth",
             ]
-        ) & set(df.columns)
+        )
+        if skip_consensus:
+            columns.add("extract_segments")
+        columns &= set(df.columns)
         if "rq" in columns:
             # PacBio CCS uses the "qs" tag for something else, so ignore if "rq" is present
             columns.discard("qs")
@@ -165,11 +193,14 @@ def _parse_group(ctx, param, value):
 @click.option("--no-hash-col", is_flag=True)
 @click.option("--min-depth", type=int)
 @click.option("--min-duplex-depth", type=int)
-@click.option("--limit-depth", type=int, default=50)
+@click.option("--limit-depth", type=int, default=50)  # TODO?
+@click.option("--max-length", type=int)
 @click.option("--method", type=click.Choice(["abpoa", "spoa"]), default="abpoa")
 @click.option("--phred-input/--no-phred-input", default=False)  # TODO
 @click.option("--phred-output/--no-phred-output", default=True)  # TODO
 @click.option("-p", "--param", type=(str, str), multiple=True, callback=parse_kv)
+@filter_gfa_options
+@click.option("--max-divergence", type=float)
 @click.option("--skip-consensus", is_flag=True)
 @click.argument("input", type=str, nargs=-1)
 def cli(
@@ -185,10 +216,16 @@ def cli(
     min_depth,
     min_duplex_depth,
     limit_depth,
+    max_length,
     method,
     phred_input,
     phred_output,
     param,
+    include,
+    include_prefix,
+    exclude,
+    exclude_prefix,
+    max_divergence,
     skip_consensus,
 ):
     compute_consensus_seqs(
@@ -203,10 +240,16 @@ def cli(
         min_depth,
         min_duplex_depth,
         limit_depth,
+        max_length,
         method,
         phred_input,
         phred_output,
         param,
+        include,
+        include_prefix,
+        exclude,
+        exclude_prefix,
+        max_divergence,
         skip_consensus,
     )
 

@@ -14,6 +14,7 @@ from paulssonlab.sequencing.gfa import (
     dag_forward_segments,
     filter_gfa,
     filter_gfa_options,
+    gfa_name_mapping,
     gfa_to_dag,
 )
 from paulssonlab.sequencing.processing import find_duplex_pairs as _find_duplex_pairs
@@ -32,11 +33,16 @@ def find_duplex_pairs(
     end_to_end,
     max_time_delta,
     min_qscore,
+    max_divergence,
 ):
     if not max_time_delta:
         raise ValueError("max_time_delta must be positive (seconds)")
     gfa = gfapy.Gfa.from_file(gfa_filename)
     gfa = filter_gfa(gfa, include, include_prefix, exclude, exclude_prefix)
+    if max_divergence is not None:
+        name_to_seq = gfa_name_mapping(gfa)
+    else:
+        name_to_seq = None
     graph = gfa_to_dag(gfa)
     # weakly_connected_components is a generator, so only compute once
     wccs = list(nx.weakly_connected_components(graph))
@@ -57,6 +63,8 @@ def find_duplex_pairs(
             _timedelta(seconds=max_time_delta),
             forward_segments,
             endpoints=endpoints,
+            max_divergence=max_divergence,
+            name_to_seq=name_to_seq,
         )
         df = df.select(["name", "name_right"])
         df = df.collect()
@@ -73,6 +81,7 @@ def find_duplex_pairs(
 @click.option("--max-time-delta", type=float, default=3)
 @click.option("--min-qscore", type=int, default=8)
 @click.option("--no-min-qscore", is_flag=True)
+@click.option("--max-divergence", type=float)
 @click.option("--gfa", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option("--gaf", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.argument("bam", type=click.Path(exists=True, dir_okay=False))
@@ -90,6 +99,7 @@ def cli(
     max_time_delta,
     min_qscore,
     no_min_qscore,
+    max_divergence,
 ):
     find_duplex_pairs(
         gfa,
@@ -103,6 +113,7 @@ def cli(
         end_to_end,
         max_time_delta,
         None if no_min_qscore else min_qscore,
+        max_divergence,
     )
 
 
