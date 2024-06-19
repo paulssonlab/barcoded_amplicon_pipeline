@@ -82,7 +82,7 @@ process PREPARE_READS {
 process PREPARE_CONSENSUS {
     tag "$meta.id"
 
-    time 180.min
+    time 240.min
     memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     input:
@@ -111,7 +111,7 @@ process PREPARE_CONSENSUS {
 process CONSENSUS_PREPARED {
     tag "$meta.id"
 
-    time 180.min
+    time 240.min
     memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     input:
@@ -139,7 +139,7 @@ process CONSENSUS_PREPARED {
 process CONSENSUS {
     tag "$meta.id"
 
-     time 180.min
+     time 240.min
     memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     input:
