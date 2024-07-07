@@ -23,9 +23,23 @@ def any_not_none(*args):
     return any(a is not None for a in args)
 
 
+def parse_number(s):
+    try:
+        return int(s)
+    except ValueError:
+        try:
+            return float(s)
+        except ValueError:
+            pass
+    return s
+
+
 # FROM: https://stackoverflow.com/a/53718454
-def count_placeholders(format_string):
-    return sum(1 for x in string.Formatter().parse(format_string) if x[1] is not None)
+def str_placeholders(format_string):
+    return [
+        parse_number(x[1]) if x[1] else idx
+        for idx, x in enumerate(string.Formatter().parse(format_string))
+    ]
 
 
 def sign(x):
