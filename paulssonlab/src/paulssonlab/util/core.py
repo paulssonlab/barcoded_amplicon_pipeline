@@ -37,8 +37,9 @@ def parse_number(s):
 # FROM: https://stackoverflow.com/a/53718454
 def str_placeholders(format_string):
     return [
-        parse_number(x[1]) if x[1] else idx
+        idx if x[1] == "" else parse_number(x[1])
         for idx, x in enumerate(string.Formatter().parse(format_string))
+        if x[1] is not None
     ]
 
 
