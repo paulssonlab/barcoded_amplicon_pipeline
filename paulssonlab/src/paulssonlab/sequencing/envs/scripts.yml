@@ -14,11 +14,10 @@ dependencies:
   - numpy
   - parasail-python
   - pip
-  - pip:
-      - polars-u64-idx
+  - polars-u64-idx
   - pyabpoa
   - pyarrow
   - pysam
   - pyspoa
-  - python=3.12.3
+  - python=3.12.4
   - pywfa

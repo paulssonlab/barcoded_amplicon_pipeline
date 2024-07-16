@@ -26,18 +26,14 @@ dependencies:
   - numba
   - numpy
   - pandas
-  - pip
-  - pip:
-      # NOTE: must module load gcc/9.2.0 to build pywfa, pyabpoa
-      - dnaio # via pip until bioconda starts building for python 3.11/3.12
-      - parasail # via pip until bioconda starts building for python 3.11/3.12
-      - polars-u64-idx
-      - pyabpoa # via pip until bioconda starts building for python 3.11/3.12
-      - pysam # via pip until bioconda starts building for python 3.11/3.12
-      #- pyspoa # does not compile correctly
-      - pywfa # via pip until bioconda starts building for python 3.11/3.12
+  - dnaio
+  - parasail-python
+  - pyabpoa
+  - pysam
+  - pyspoa
+  - pywfa
+  - polars-u64-idx
   - pyarrow
   - python
   - scipy
   - tqdm
-  - xopen # for dnaio
