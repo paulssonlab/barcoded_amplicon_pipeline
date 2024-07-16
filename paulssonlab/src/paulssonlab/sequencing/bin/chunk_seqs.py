@@ -1,7 +1,8 @@
 #!/usr/bin/env python
-import gzip
 import itertools as it
+import os.path
 import sys
+from glob import glob
 from pathlib import Path
 
 import click
@@ -29,11 +30,17 @@ def chunk_seqs(
     num_seqs=None,
     num_files=None,
     max_size=None,
+    use_compressed_size=False,
 ):
     if sum([num_seqs is not None, num_files is not None, max_size is not None]) != 1:
         raise ValueError(
             "exactly one of num_seqs, num_files, and max_size must be given"
         )
+    input_filenames = sum(
+        it.chain([glob(os.path.expanduser(f)) for f in input_filenames]), []
+    )
+    if not input_filenames:
+        raise ValueError("no paths matched input filename pattern(s)")
     input_format = detect_format(
         input_format,
         input_filenames[0],
@@ -118,7 +125,13 @@ def chunk_seqs(
                     output_file.write(seq)
                     seqs_written += 1
                     if (num_seqs is not None and seqs_written == num_seqs) or (
-                        max_size is not None and output_file._file.tell() >= max_size
+                        max_size is not None
+                        and (
+                            os.path.getsize(output_filename)
+                            if use_compressed_size
+                            else output_file._file.tell()
+                        )
+                        >= max_size
                     ):
                         output_file.close()
                         output_file = None
@@ -136,6 +149,11 @@ def chunk_seqs(
 @click.option("--seqs", type=int, help="Number of sequences per output file")
 @click.option("--files", type=int, help="Number of output files")
 @click.option("--size", type=float, help="Max output file size in bytes")
+@click.option(
+    "--use-compressed-size/--use-uncompressed-size",
+    default=False,
+    help="When --size is given, whether to use the compressed or uncompressed size of .fastq.gz files. Only affects .fastq.gz output. Enabling this may cause a significant slowdown on high-latency filesystems.",
+)
 @click.argument("input", type=str, nargs=-1)
 @click.argument("output", type=click.Path(file_okay=False))
 def cli(
@@ -147,6 +165,7 @@ def cli(
     seqs,
     files,
     size,
+    use_compressed_size,
 ):
     if sum([seqs is not None, files is not None, size is not None]) != 1:
         click.error("exactly one of --seqs, --files, --size must be specified")
@@ -159,6 +178,7 @@ def cli(
         seqs,
         files,
         size,
+        use_compressed_size,
     )
 
 
