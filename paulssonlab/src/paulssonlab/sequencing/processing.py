@@ -282,7 +282,7 @@ def prepare_reads(df, forward_segments, endpoints, name_to_seq, max_divergence=N
         is_primary_alignment=pl.col("name").is_first_distinct(),
     ).with_columns(_candidate=candidate)
     # only ONT duplex reads will have dx SAM tag
-    if "dx" in df.columns:
+    if "dx" in df.collect_schema().names():
         df_valid_reads = flag_valid_ont_duplex_reads(df.filter(pl.col("_candidate")))
         df = pl.concat(
             [df_valid_reads, df.filter(~pl.col("_candidate"))], how="diagonal"
@@ -410,7 +410,7 @@ def compute_depth(df, over=None, prefix=None, suffix=None):
             return expr
 
     exprs = {format_column("depth"): wrap_over(pl.len())}
-    if "dx" in df.columns:
+    if "dx" in df.collect_schema().names():
         exprs[format_column("duplex_depth")] = wrap_over((pl.col("dx") == 1).sum())
     return exprs
 
@@ -429,13 +429,14 @@ def map_read_groups(
     def _limit_group(expr):
         sort_columns = []
         descending = []
+        df_columns = collect_schema().names()
         # PacBio: prefer high-accuracy CCS reads
-        if "rq" in df.columns:
+        if "rq" in df_columns:
             sort_columns = ["rq", *sort_columns]
             descending = [True, *descending]
         # ONT: prefer high-accuracy reads
         # PacBio CCS uses the "qs" tag for something else, so ignore if "rq" is present
-        if "qs" in df.columns and "rq" not in df.columns:
+        if "qs" in df_columns and "rq" not in df_columns:
             sort_columns = ["qs", *sort_columns]
             descending = [True, *descending]
         if sort_columns:
@@ -673,20 +674,21 @@ def cut_cigar_df(
     if isinstance(name_to_seq, Gfa):
         name_to_seq = gfa_name_mapping(name_to_seq)
     exclude_columns = []
-    if path_column not in df.columns:
+    df_columns = df.collect_schema().names()
+    if path_column not in df_columns:
         raise ValueError(f"missing column {path_column}")
-    if cigar_column not in df.columns:
+    if cigar_column not in df_columns:
         raise ValueError(f"missing column {cigar_column}")
     else:
         exclude_columns.append(cigar_column)
     struct = dict(path=path_column, cigar=cigar_column)
-    _include_column(struct, exclude_columns, df.columns, sequence_column, "seq")
-    _include_column(struct, exclude_columns, df.columns, phred_column, "phred")
-    _include_column(struct, None, df.columns, query_start_column, "query_start")
-    _include_column(struct, None, df.columns, query_end_column, "query_end")
-    _include_column(struct, None, df.columns, query_length_column, "query_length")
-    _include_column(struct, None, df.columns, path_start_column, "path_start")
-    _include_column(struct, None, df.columns, path_end_column, "path_end")
+    _include_column(struct, exclude_columns, df_columns, sequence_column, "seq")
+    _include_column(struct, exclude_columns, df_columns, phred_column, "phred")
+    _include_column(struct, None, df_columns, query_start_column, "query_start")
+    _include_column(struct, None, df_columns, query_end_column, "query_end")
+    _include_column(struct, None, df_columns, query_length_column, "query_length")
+    _include_column(struct, None, df_columns, path_start_column, "path_start")
+    _include_column(struct, None, df_columns, path_end_column, "path_end")
     if keep_full:
         exclude_columns = []
     dtype = _cut_cigar_dtype(

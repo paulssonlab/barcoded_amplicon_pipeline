@@ -66,14 +66,15 @@ def compute_consensus_seqs(
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename], how="diagonal")
         df = df.filter(pl.col("path").is_not_null())
-        if "is_primary_alignment" in df.columns:
+        df_columns = df.collect_schema().names()
+        if "is_primary_alignment" in df_columns:
             df = df.filter(pl.col("is_primary_alignment"))
-        if "end_to_end" in df.columns:
+        if "end_to_end" in df_columns:
             df = df.filter(pl.col("end_to_end"))
-        if "is_valid" in df.columns:
+        if "is_valid" in df_columns:
             df = df.filter(pl.col("is_valid"))
         if group:
-            if hash_column is not None and hash_column in df.columns:
+            if hash_column is not None and hash_column in df_columns:
                 hash_expr = pl.col(hash_column)
             else:
                 hash_expr = categorical_list_hash(pl.col("path"))
@@ -81,7 +82,7 @@ def compute_consensus_seqs(
         if max_length:
             df = df.filter(pl.col("read_seq").str.len_bytes() <= max_length)
         if max_divergence is not None:
-            if "max_divergence" not in df.columns:
+            if "max_divergence" not in df_columns:
                 all_segments = unique_segments(df, pl.col("path"))
                 selected_segments = filter_segments(
                     all_segments,
@@ -117,7 +118,7 @@ def compute_consensus_seqs(
         )
         if skip_consensus:
             columns.add("extract_segments")
-        columns &= set(df.columns)
+        columns &= set(df_columns)
         if "rq" in columns:
             # PacBio CCS uses the "qs" tag for something else, so ignore if "rq" is present
             columns.discard("qs")
@@ -126,7 +127,7 @@ def compute_consensus_seqs(
         if not skip_consensus:
             # path is already included by group_by
             agg_columns = set(["grouping_depth", "grouping_duplex_depth"]) & set(
-                df.columns
+                df.collect_schema().names()
             )
             df = map_read_groups(
                 df,
