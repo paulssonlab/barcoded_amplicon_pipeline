@@ -691,10 +691,11 @@ def cut_cigar_df(
     _include_column(struct, None, df_columns, path_end_column, "path_end")
     if keep_full:
         exclude_columns = []
+    df_schema = df.collect_schema()
     dtype = _cut_cigar_dtype(
         [s[1:] for s in name_to_seq.keys()],
-        sequence_dtype=df.schema.get(sequence_column),
-        phred_dtype=df.schema.get(phred_column),
+        sequence_dtype=df_schema.get(sequence_column),
+        phred_dtype=df_schema.get(phred_column),
         **cut_cigar_kwargs,
     )
     df = df.select(
