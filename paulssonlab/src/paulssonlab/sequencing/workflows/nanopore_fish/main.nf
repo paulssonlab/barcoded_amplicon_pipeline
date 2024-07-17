@@ -150,7 +150,7 @@ workflow NANOPORE_FISH {
     map_call_process(POD5_MERGE,
                      ch_pod5_chunked,
                      ["pod5_input_chunked", "pod5_merge_args"],
-                     [id: { pod5, meta -> "${pod5[0].baseName}_merged" }],
+                     [id: { pod5, meta -> "${strip_extension(pod5[0].name)}_merged" }],
                      "pod5_input_chunked",
                      ["pod5_to_split"],
                      "_POD5_MERGE") { pod5, meta -> [pod5] }
@@ -172,14 +172,14 @@ workflow NANOPORE_FISH {
     map_call_process(POD5_VIEW_AND_SUBSET,
         ch_to_pod5_split,
         ["pod5_to_split", "pod5_view_args", "pod5_subset_args"],
-        [id: { read_list, meta -> read_list.baseName }],
+        [id: { read_list, meta -> strip_extension(read_list.name) }],
         "pod5_to_split",
         ["pod5_split"],
         "_POD5_VIEW_AND_SUBSET") { pod5_to_split, meta -> [pod5_to_split] }
         .set { ch_pod5_split }
     ch_pod5_split.map { meta ->
         [*:meta, pod5_split_to_chunk: meta.pod5_split.flatten()
-                                                        .groupBy { it.baseName }
+                                                        .groupBy { strip_extension(it.name) }
                                                         .values()
                                                         .collect { it.sort() }
                                                         .sort() { it[0] }
@@ -204,7 +204,7 @@ workflow NANOPORE_FISH {
     map_call_process(POD5_MERGE2,
                      ch_pod5_split_chunked,
                      ["pod5_split_to_merge", "pod5_merge_args"],
-                     [id: { pod5, meta -> "${pod5[0].baseName}_merged" }],
+                     [id: { pod5, meta -> "${strip_extension(pod5[0].name)}_merged" }],
                      "pod5_split_to_merge",
                      ["pod5_split_merged"],
                      "_POD5_MERGE2") { pod5, meta -> [pod5] }
@@ -269,7 +269,7 @@ workflow NANOPORE_FISH {
     map_call_process(DORADO_DUPLEX,
         ch_do_dorado_duplex.yes,
         ["pod5", "dorado_model_dir", "dorado_duplex_model_dir", "dorado_duplex_args"],
-        [id: { pod5, meta -> exemplar(pod5).baseName }],
+        [id: { pod5, meta -> strip_extension(exemplar(pod5).name) }],
         "pod5",
         ["bam"],
         "_DORADO_DUPLEX") { pod5, meta -> [pod5, meta.dorado_model_dir, meta.dorado_duplex_model_dir] }
@@ -279,7 +279,7 @@ workflow NANOPORE_FISH {
     map_call_process(DORADO_BASECALLER,
         ch_do_dorado_simplex,
         ["pod5", "dorado_model_dir", "dorado_basecaller_args"],
-        [id: { pod5, meta -> exemplar(pod5).baseName }],
+        [id: { pod5, meta -> strip_extension(exemplar(pod5).name) }],
         "pod5",
         ["bam"],
         "_DORADO_BASECALLER") { pod5, meta -> [pod5, meta.dorado_model_dir] }
@@ -310,7 +310,7 @@ workflow NANOPORE_FISH {
     map_call_process(SAMTOOLS_FASTQ,
         ch_bam,
         ["bam", "samtools_fastq_args"],
-        [id: { bam, meta -> bam.baseName }],
+        [id: { bam, meta -> strip_extension(bam.name) }],
         "bam",
         ["fastq"],
         "_SAMTOOLS_FASTQ") { bam, meta -> [bam] }
@@ -331,7 +331,7 @@ workflow NANOPORE_FISH {
     map_call_process(SAMTOOLS_IMPORT,
         ch_fastq_input,
         ["fastq", "samtools_import_args"],
-        [id: { fastq, meta -> fastq.baseName }],
+        [id: { fastq, meta -> strip_extension(fastq.name) }],
         "fastq",
         ["bam"],
         "_SAMTOOLS_IMPORT") { fastq, meta -> [fastq] }
@@ -369,7 +369,7 @@ workflow NANOPORE_FISH {
     map_call_process(FIND_DUPLEX_PAIRS,
         ch_do_nondorado_duplex_pairing.yes,
         ["bam_and_gaf", "gfa_grouping", "find_duplex_pairs_args"],
-        [id: { bam_and_gaf, meta -> bam_and_gaf[0].baseName }],
+        [id: { bam_and_gaf, meta -> strip_extension(bam_and_gaf[0].name) }],
         "bam_and_gaf",
         ["duplex_pairs"],
         "_FIND_DUPLEX_PAIRS") { bam_and_gaf, meta -> [meta.gfa_grouping, bam_and_gaf[0], bam_and_gaf[1]] }
@@ -382,7 +382,7 @@ workflow NANOPORE_FISH {
     map_call_process(DORADO_DUPLEX_WITH_PAIRS,
         ch_pod5_and_pairs,
         ["pod5_and_pairs", "dorado_model_dir", "dorado_duplex_model_dir", "dorado_duplex_args"],
-        [id: { pod5_and_pairs, meta -> exemplar(pod5_and_pairs[0]).baseName }],
+        [id: { pod5_and_pairs, meta -> strip_extension(exemplar(pod5_and_pairs[0]).name) }],
         "pod5_and_pairs",
         ["bam_duplex"],
         "_DORADO_DUPLEX_WITH_PAIRS") { pod5_and_pairs, meta -> [pod5_and_pairs[0], pod5_and_pairs[1], meta.dorado_model_dir, meta.dorado_duplex_model_dir] }
@@ -399,7 +399,7 @@ workflow NANOPORE_FISH {
     map_call_process(SAMTOOLS_MERGE,
         ch_bam_to_combine,
         ["bam_to_combine", "samtools_merge_args"],
-        [id: { bam_to_combine, meta -> bam_to_combine[1].baseName }],
+        [id: { bam_to_combine, meta -> strip_extension(bam_to_combine[1].name) }],
         "bam_to_combine",
         ["bam"],
         "_SAMTOOLS_MERGE") { bam_to_combine, meta -> [bam_to_combine] }
@@ -418,7 +418,7 @@ workflow NANOPORE_FISH {
     map_call_process(SAMTOOLS_FASTQ_DUPLEX,
         ch_bam_combined,
         ["bam_duplex", "samtools_fastq_args"],
-        [id: { bam, meta -> bam.baseName }],
+        [id: { bam, meta -> strip_extension(bam.name) }],
         "bam_duplex",
         ["fastq_duplex"],
         "_SAMTOOLS_FASTQ_DUPLEX") { bam, meta -> [bam] }
@@ -497,7 +497,7 @@ workflow NANOPORE_FISH {
             it,
             ["bam_and_gaf", "join_gaf_args", "tabular_format"],
             [
-                id: { bam_and_gaf, meta -> bam_and_gaf[0].baseName },
+                id: { bam_and_gaf, meta -> strip_extension(bam_and_gaf[0].name) },
                 input_format: { bam_and_gaf, meta -> "bam" },
                 output_format: { bam_and_gaf, meta -> meta.tabular_format }
             ],
@@ -511,7 +511,7 @@ workflow NANOPORE_FISH {
         ch_join_gaf_grouping,
         ["join_gaf_grouping_output", "gfa_grouping", "prepare_reads_args", "tabular_format"],
         [
-            id: { join_gaf_grouping_output, meta -> join_gaf_grouping_output.baseName },
+            id: { join_gaf_grouping_output, meta -> strip_extension(join_gaf_grouping_output.name) },
             input_format: { join_gaf_grouping_output, meta -> meta.tabular_format },
             output_format: { join_gaf_grouping_output, meta -> meta.tabular_format }
         ],
@@ -576,7 +576,7 @@ workflow NANOPORE_FISH {
         ch_prepare_consensus,
         ["prepare_consensus_output", "consensus_args", "tabular_format"],
         [
-            id: { prepare_consensus_output, meta -> prepare_consensus_output.baseName },
+            id: { prepare_consensus_output, meta -> strip_extension(prepare_consensus_output.name) },
             input_format: { prepare_consensus_output, meta -> meta.tabular_format },
             output_format: { prepare_consensus_output, meta -> meta.tabular_format }
         ],
@@ -613,12 +613,12 @@ workflow NANOPORE_FISH {
         }
     }
     ch_input_type.consensus.map {
-        def fasta_map = it.consensus_fasta_input.collectEntries { f -> [(f.baseName): f] }
+        def fasta_map = it.consensus_fasta_input.collectEntries { f -> [(strip_extension(f.name)): f] }
         def reordered_fasta = it.consensus_tabular_input.collect { f ->
-            if (!fasta_map.containsKey(f.baseName)) {
+            if (!fasta_map.containsKey(strip_extension(f.name))) {
                 throw new Exception("could not find FASTA corresponding to tabular consensus input: ${f.name}")
             }
-            fasta_map[f.baseName]
+            fasta_map[strip_extension(f.name)]
         }
         [*:it, consensus_tabular: it.consensus_tabular_input, consensus_fasta: reordered_fasta]
     }
@@ -644,7 +644,7 @@ workflow NANOPORE_FISH {
         map_call_process(GRAPHALIGNER_VARIANTS,
             it,
             ["consensus_fasta", "gfa_variants", "graphaligner_args"],
-            [id: { fasta, meta -> exemplar(fasta).baseName }],
+            [id: { fasta, meta -> strip_extension(exemplar(fasta).name) }],
             "consensus_fasta",
             ["gaf_variants"],
             "_GRAPHALIGNER_VARIANTS") { fasta, meta -> [fasta, meta.gfa_variants] }
@@ -660,7 +660,7 @@ workflow NANOPORE_FISH {
             it,
             ["consensus_and_gaf", "join_gaf_args", "tabular_format"],
             [
-                id: { consensus_and_gaf, meta -> exemplar(consensus_and_gaf)[0].baseName },
+                id: { consensus_and_gaf, meta -> strip_extension(exemplar(consensus_and_gaf)[0].name) },
                 input_format: { consensus_and_gaf, meta -> meta.tabular_format },
                 output_format: { consensus_and_gaf, meta -> meta.tabular_format }
             ],
@@ -693,7 +693,7 @@ workflow NANOPORE_FISH {
         ch_do_realign.yes,
         ["join_gaf_variants_output", "gfa_variants", "realign_args", "tabular_format"],
         [
-            id: { join_gaf_variants_output, meta -> join_gaf_variants_output.baseName },
+            id: { join_gaf_variants_output, meta -> strip_extension(join_gaf_variants_output.name) },
             input_format: { join_gaf_variants_output, meta -> meta.tabular_format },
             output_format: { join_gaf_variants_output, meta -> meta.tabular_format }
         ],
@@ -720,7 +720,7 @@ workflow NANOPORE_FISH {
         ch_realign,
         ["realign_output", "gfa_variants", "extract_segments_args", "tabular_format"],
         [
-            id: { realign_output, meta -> realign_output.baseName },
+            id: { realign_output, meta -> strip_extension(realign_output.name) },
             input_format: { realign_output, meta -> meta.tabular_format },
             output_format: { realign_output, meta -> meta.tabular_format }
         ],

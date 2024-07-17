@@ -15,6 +15,26 @@ import nextflow.util.CsvParser
 @Field static final normal = "\033[0;0m"
 @Field static final bold = "\033[0;1m"
 
+@Field static final COMPOUND_EXTENSIONS = [".fasta.gz", ".fastq.gz"]
+
+static def strip_extension(name) {
+    if (name == null) {
+        return null
+    }
+    for (ext in COMPOUND_EXTENSIONS) {
+        if (name.endsWith(ext)) {
+            return name[0..<(name.length()-ext.length())]
+        }
+    }
+    def idx = name.lastIndexOf(".")
+    if (idx > 0) {
+        return name[0..<idx]
+    } else {
+        // filename is dotfile (".foo") or no dot in filename
+        return name
+    }
+}
+
 static def exemplar(obj) {
     (obj instanceof List) ? obj[0] : obj
 
