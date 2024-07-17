@@ -282,12 +282,16 @@ def prepare_reads(df, forward_segments, endpoints, name_to_seq, max_divergence=N
         is_primary_alignment=pl.col("name").is_first_distinct(),
     ).with_columns(_candidate=candidate)
     # only ONT duplex reads will have dx SAM tag
+    # TODO
     # if "dx" in df.collect_schema().names():
     if "dx" in df.columns:
         df_valid_reads = flag_valid_ont_duplex_reads(df.filter(pl.col("_candidate")))
         df = pl.concat(
             [df_valid_reads, df.filter(~pl.col("_candidate"))], how="diagonal"
         )
+    # TODO
+    if "qs" not in df.columns and "read_phred" in df.columns:
+        df = df.with_columns(qs=pl.col("read_phred").list.mean().cast(pl.Float32))
     df = df.select(pl.all().exclude("_candidate"))
     return df
 
@@ -410,11 +414,13 @@ def compute_depth(df, over=None, prefix=None, suffix=None):
         def wrap_over(expr):
             return expr
 
-    exprs = {format_column("depth"): wrap_over(pl.len())}
+    exprs = {format_column("depth"): wrap_over(pl.len()).alias(format_column("depth"))}
     # TODO
     # if "dx" in df.collect_schema().names():
     if "dx" in df.columns:
-        exprs[format_column("duplex_depth")] = wrap_over((pl.col("dx") == 1).sum())
+        exprs[format_column("duplex_depth")] = wrap_over(
+            (pl.col("dx") == 1).sum().alias(format_column("duplex_depth"))
+        )
     return exprs
 
 

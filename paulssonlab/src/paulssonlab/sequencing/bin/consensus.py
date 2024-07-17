@@ -102,35 +102,38 @@ def compute_consensus_seqs(
             df = df.with_columns(**depth_columns)
         if min_depth:
             df = df.filter(depth_columns["grouping_depth"] > min_depth)
-        if min_duplex_depth and len(depth_columns) == 2:
+        if min_duplex_depth and "grouping_duplex_depth" in depth_columns:
             df = df.filter(depth_columns["grouping_duplex_depth"] > min_duplex_depth)
-        columns = set(
-            [
-                "name",
-                "path",
-                "read_seq",
-                "read_phred",
-                "reverse_complement",
-                "rq",
-                "qs",
-                "dx",
-                "grouping_depth",
-                "grouping_duplex_depth",
-            ]
-        )
-        if skip_consensus:
-            columns.add("extract_segments")
+        column_order = [
+            "name",
+            "path",
+            "read_seq",
+            "read_phred",
+            "reverse_complement",
+            "rq",
+            "qs",
+            "dx",
+            "grouping_depth",
+            "grouping_duplex_depth",
+        ]
+        columns = set(column_order)
+        if not skip_consensus:
+            columns.discard("extract_segments")
         # TODO
-        # columns &= set(df.collect_schema().names())
-        columns &= set(df.columns)
+        # df_columns = df.collect_schema().names()
+        df_columns = df.columns
+        # set intersections don't preserve order
+        columns &= set(df_columns)
         if "rq" in columns:
             # PacBio CCS uses the "qs" tag for something else, so ignore if "rq" is present
             columns.discard("qs")
-        # TODO: for some reason this select does not reorder columns according to columns
-        df = df.select(pl.col(columns))
+        df = df.select(pl.col(sorted(columns, key=column_order.index)))
         if not skip_consensus:
             # path is already included by group_by
-            agg_columns = set(["grouping_depth", "grouping_duplex_depth"]) & columns
+            agg_columns = sorted(
+                set(["grouping_depth", "grouping_duplex_depth"]) & columns,
+                key=column_order.index,
+            )
             df = map_read_groups(
                 df,
                 partial(
@@ -140,8 +143,8 @@ def compute_consensus_seqs(
                     return_phreds=output_phreds,
                     **consensus_kwargs,
                 ),
-                *compute_depth(df, prefix="consensus_"),
                 pl.col(agg_columns).first(),
+                *compute_depth(df, prefix="consensus_").values(),
                 max_group_size=limit_depth,
             )
         # TODO: try streaming?
