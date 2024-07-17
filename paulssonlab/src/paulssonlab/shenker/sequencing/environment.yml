@@ -32,7 +32,7 @@ dependencies:
   - pysam
   - pyspoa
   - pywfa
-  - polars-u64-idx
+  - polars-u64-idx=0.20.31
   - pyarrow
   - python
   - scipy

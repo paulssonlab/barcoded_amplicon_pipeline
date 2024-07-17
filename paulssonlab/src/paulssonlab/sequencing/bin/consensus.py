@@ -66,7 +66,9 @@ def compute_consensus_seqs(
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename], how="diagonal")
         df = df.filter(pl.col("path").is_not_null())
-        df_columns = df.collect_schema().names()
+        # TODO
+        # df_columns = df.collect_schema().names()
+        df_columns = df.columns
         if "is_primary_alignment" in df_columns:
             df = df.filter(pl.col("is_primary_alignment"))
         if "end_to_end" in df_columns:
@@ -118,7 +120,9 @@ def compute_consensus_seqs(
         )
         if skip_consensus:
             columns.add("extract_segments")
-        columns &= set(df_columns)
+        # TODO
+        # columns &= set(df.collect_schema().names())
+        columns &= set(df.columns)
         if "rq" in columns:
             # PacBio CCS uses the "qs" tag for something else, so ignore if "rq" is present
             columns.discard("qs")
@@ -126,9 +130,7 @@ def compute_consensus_seqs(
         df = df.select(pl.col(columns))
         if not skip_consensus:
             # path is already included by group_by
-            agg_columns = set(["grouping_depth", "grouping_duplex_depth"]) & set(
-                df.collect_schema().names()
-            )
+            agg_columns = set(["grouping_depth", "grouping_duplex_depth"]) & columns
             df = map_read_groups(
                 df,
                 partial(

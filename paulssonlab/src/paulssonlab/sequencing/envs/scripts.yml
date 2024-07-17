@@ -14,7 +14,7 @@ dependencies:
   - numpy
   - parasail-python
   - pip
-  - polars-u64-idx
+  - polars-u64-idx=0.20.31
   - pyabpoa
   - pyarrow
   - pysam

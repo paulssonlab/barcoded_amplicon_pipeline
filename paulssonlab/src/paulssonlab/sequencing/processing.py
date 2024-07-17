@@ -282,7 +282,8 @@ def prepare_reads(df, forward_segments, endpoints, name_to_seq, max_divergence=N
         is_primary_alignment=pl.col("name").is_first_distinct(),
     ).with_columns(_candidate=candidate)
     # only ONT duplex reads will have dx SAM tag
-    if "dx" in df.collect_schema().names():
+    # if "dx" in df.collect_schema().names():
+    if "dx" in df.columns:
         df_valid_reads = flag_valid_ont_duplex_reads(df.filter(pl.col("_candidate")))
         df = pl.concat(
             [df_valid_reads, df.filter(~pl.col("_candidate"))], how="diagonal"
@@ -410,7 +411,9 @@ def compute_depth(df, over=None, prefix=None, suffix=None):
             return expr
 
     exprs = {format_column("depth"): wrap_over(pl.len())}
-    if "dx" in df.collect_schema().names():
+    # TODO
+    # if "dx" in df.collect_schema().names():
+    if "dx" in df.columns:
         exprs[format_column("duplex_depth")] = wrap_over((pl.col("dx") == 1).sum())
     return exprs
 
@@ -429,7 +432,9 @@ def map_read_groups(
     def _limit_group(expr):
         sort_columns = []
         descending = []
-        df_columns = collect_schema().names()
+        # TODO
+        # df_columns = df.collect_schema().names()
+        df_columns = df.columns
         # PacBio: prefer high-accuracy CCS reads
         if "rq" in df_columns:
             sort_columns = ["rq", *sort_columns]
@@ -674,7 +679,9 @@ def cut_cigar_df(
     if isinstance(name_to_seq, Gfa):
         name_to_seq = gfa_name_mapping(name_to_seq)
     exclude_columns = []
-    df_columns = df.collect_schema().names()
+    # TODO
+    # df_columns = df.collect_schema().names()
+    df_columns = df.columns
     if path_column not in df_columns:
         raise ValueError(f"missing column {path_column}")
     if cigar_column not in df_columns:
@@ -691,7 +698,9 @@ def cut_cigar_df(
     _include_column(struct, None, df_columns, path_end_column, "path_end")
     if keep_full:
         exclude_columns = []
-    df_schema = df.collect_schema()
+    # TODO
+    # df_schema = df.collect_schema()
+    df_schema = df.schema
     dtype = _cut_cigar_dtype(
         [s[1:] for s in name_to_seq.keys()],
         sequence_dtype=df_schema.get(sequence_column),

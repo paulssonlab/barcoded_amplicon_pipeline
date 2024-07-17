@@ -5,6 +5,7 @@ max_divergence
 
 [defaults]
 fastq_input = "fastq_chunked/*.fastq.gz"
+# prepare_reads_input = "prepare_reads/*.arrow"
 basecall = false
 #pod5_input = "pod5_split/*.pod5"
 pod5_chunk = false
