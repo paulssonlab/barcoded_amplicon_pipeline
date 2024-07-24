@@ -93,8 +93,10 @@ def degenerate_parasail_matrix(
             matrix[idx, idx2] = matrix[idx2, idx] = degenerate_match
         for idx2 in degenerate_mismatch_idxs:
             matrix[idx, idx2] = matrix[idx2, idx] = degenerate_mismatch
+    # TODO: adding space to prevent unintentional aliases to work around bug
+    # https://github.com/jeffdaily/parasail/issues/107
     alphabet_aliases = "".join(
-        f"{base}{deg_base}{deg_base}{base}"
+        f"{base}{deg_base} "
         for deg_base, matching_bases in degenerate_bases.items()
         for base in matching_bases
     )
