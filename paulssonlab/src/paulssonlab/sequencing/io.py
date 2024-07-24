@@ -28,7 +28,7 @@ SAM_TAG_REGEX = re.compile(
 DEFAULT_BAM_TAGS = {
     # ONT
     "RG": pa.dictionary(pa.uint8(), pa.string()),
-    "qs": pa.uint8(),
+    "qs": pa.float32(),  # dorado commit on 240516 changed this from int to float
     "ns": pa.int64(),
     "ts": pa.int64(),
     "mx": pa.uint8(),
