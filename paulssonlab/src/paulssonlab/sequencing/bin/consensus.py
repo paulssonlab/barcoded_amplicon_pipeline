@@ -107,6 +107,7 @@ def compute_consensus_seqs(
         column_order = [
             "name",
             "path",
+            "path_hash",
             "read_seq",
             "read_phred",
             "reverse_complement",
@@ -131,7 +132,7 @@ def compute_consensus_seqs(
         if not skip_consensus:
             # path is already included by group_by
             agg_columns = sorted(
-                set(["grouping_depth", "grouping_duplex_depth"]) & columns,
+                set(["path_hash", "grouping_depth", "grouping_duplex_depth"]) & columns,
                 key=column_order.index,
             )
             df = map_read_groups(
