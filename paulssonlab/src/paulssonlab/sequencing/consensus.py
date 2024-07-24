@@ -139,6 +139,15 @@ def _get_consensus(
         rc,
         phreds=phreds,
     )
+    if len(seqs) == 0:
+        raise ValueError("getting the consensus of an empty list of sequences")
+    elif len(seqs) == 1:
+        res = dict(consensus_seq=seqs[0])
+        if phreds is not None and return_phreds:
+            res["consensus_phred"] = phreds[0]
+        if names is not None:
+            res["name"] = names[0]
+        return res
     poa_result = poa(
         prepared_reads["seqs"],
         phreds=prepared_reads.get("phreds"),

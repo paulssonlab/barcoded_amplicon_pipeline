@@ -64,7 +64,7 @@ workflow NANOPORE_FISH {
         find_duplex_pairs_args: "",
         prepare_reads_args: "",
         prepare_consensus: true,
-        consensus_args: "--method abpoa --no-phred-output --min-depth 3 --max-length 10000",
+        consensus_args: "--method abpoa --no-phred-output --max-length 10000",
         consensus_jobs: 400,
         consensus_jobs_per_align_job: 10,
         join_gaf_variants_args: "--rename-col path grouping_path --rename-col path_hash grouping_path_hash --rename-gaf-col path variants_path",
