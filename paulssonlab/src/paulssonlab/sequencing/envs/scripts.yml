@@ -14,10 +14,12 @@ dependencies:
   - numpy
   - parasail-python
   - pip
+  - pip:
+    - pywfa
   - polars-u64-idx=0.20.31
   - pyabpoa
   - pyarrow
   - pysam
   - pyspoa
   - python=3.12.4
-  - pywfa
+  # - pywfa # conda version has an unnecessary python <3.9 pin, so we install via pip instead
