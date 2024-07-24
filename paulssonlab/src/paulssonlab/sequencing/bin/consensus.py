@@ -101,9 +101,9 @@ def compute_consensus_seqs(
         if not skip_consensus:
             df = df.with_columns(**depth_columns)
         if min_depth:
-            df = df.filter(depth_columns["grouping_depth"] > min_depth)
+            df = df.filter(depth_columns["grouping_depth"] >= min_depth)
         if min_duplex_depth and "grouping_duplex_depth" in depth_columns:
-            df = df.filter(depth_columns["grouping_duplex_depth"] > min_duplex_depth)
+            df = df.filter(depth_columns["grouping_duplex_depth"] >= min_duplex_depth)
         column_order = [
             "name",
             "path",
