@@ -6,7 +6,8 @@ max_divergence
 [defaults]
 # fastq_input = "fastq_chunked/*.fastq.gz"
 # prepare_consensus_input = "prepare_consensus/*.arrow"
-realign_input = "realign/*.arrow"
+consensus_tabular_input = "consensus/*.arrow"
+consensus_fasta_input = "consensus/*.fasta"
 basecall = false
 #pod5_input = "pod5_split/*.pod5"
 pod5_chunk = false
