@@ -116,6 +116,7 @@ def compute_consensus_seqs(
             "dx",
             "grouping_depth",
             "grouping_duplex_depth",
+            "extract_segments",
         ]
         columns = set(column_order)
         if not skip_consensus:

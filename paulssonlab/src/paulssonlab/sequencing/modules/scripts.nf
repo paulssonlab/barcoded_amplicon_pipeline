@@ -139,7 +139,7 @@ process CONSENSUS_PREPARED {
 process CONSENSUS {
     tag "$meta.id"
 
-     time 240.min
+    time 240.min
     memory { 8.GB + 16.GB * (task.attempt - 1) }
 
     input:
