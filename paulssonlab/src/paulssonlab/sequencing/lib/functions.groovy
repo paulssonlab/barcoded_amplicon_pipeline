@@ -41,7 +41,15 @@ static def exemplar(obj) {
 }
 
 static def file_in_dir(Object... paths) {
-    file(Paths.get(*paths.collect { it as String }))
+    paths = paths.findAll { it != null }
+    def path
+    if (!paths) {
+        return
+    } else if (paths[-1][0] != "/") {
+        return file(Paths.get(*paths.collect { it as String }))
+    } else {
+        return file(paths[-1])
+    }
 }
 
 static boolean is_dir_empty(dir) {
@@ -84,7 +92,7 @@ static def rsync(remote_path, dest_path) {
     }
 }
 
-static def glob(pattern, base) {
+static def glob(base, pattern) {
     def paths = []
     def path_matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern)
     base = file(base).toAbsolutePath()
@@ -100,7 +108,7 @@ static def glob(pattern, base) {
 static def glob_inputs(ch, base, input_names) {
     ch.map { it ->
         input_names.each { k ->
-            it[k] = (it.get(k) ? glob(it[k], base) : [])
+            it[k] = (it.get(k) ? glob(base, it[k]) : [])
         }
         it
     }
@@ -110,8 +118,13 @@ static def find_inputs(ch, base, input_names) {
     ch.map { it ->
         it = it.clone()
         input_names.each { k ->
-            if (it.get(k) && file_in_dir(base, it[k]).exists()) {
-                it[k] = file_in_dir(base, it[k])
+            if (it[k]) {
+                def abs_file = file_in_dir(base, it[k])
+                if (abs_file.exists()) {
+                    it[k] = abs_file
+                } else {
+                    it.remove(k)
+                }
             } else {
                 it.remove(k)
             }
