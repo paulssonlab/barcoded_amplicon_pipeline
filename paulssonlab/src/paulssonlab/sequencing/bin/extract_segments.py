@@ -18,6 +18,7 @@ def extract_segments(
     output_filename,
     input_format,
     output_format,
+    name_col,
     path_column,
     cigar_column,
     sequence_column,
@@ -63,6 +64,10 @@ def extract_segments(
             keep_full=keep_full,
             cut_cigar_kwargs=cut_cigar_kwargs,
         )
+        df = df.with_columns(
+            is_primary_alignment=pl.col(name_col).is_first_distinct()
+            & pl.col(path_column).is_not_null(),
+        )
         # TODO: waiting on polars bugs before we can sink_ipc, see realign.py
         df = df.collect()
         if output_format == "arrow":
@@ -83,6 +88,7 @@ def extract_segments(
     "--output-format",
     type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
+@click.option("--name-col", default="name")
 @click.option("--path-col", default="variants_path")
 @click.option("--cigar-col", default="realign_cg")
 @click.option("--seq-col", default="consensus_seq")
@@ -115,6 +121,7 @@ def cli(
     output,
     input_format,
     output_format,
+    name_col,
     path_col,
     cigar_col,
     seq_col,
@@ -146,6 +153,7 @@ def cli(
         output,
         input_format,
         output_format,
+        name_col,
         path_col,
         cigar_col,
         None if no_seq_col else seq_col,

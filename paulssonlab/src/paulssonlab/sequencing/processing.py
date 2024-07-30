@@ -282,7 +282,8 @@ def prepare_reads(
         df = compute_divergences(df, divergence_segments, struct_name=segments_struct)
         candidate = candidate & (pl.col("max_divergence") <= max_divergence)
     df = df.with_columns(
-        is_primary_alignment=pl.col("name").is_first_distinct(),
+        is_primary_alignment=pl.col("name").is_first_distinct()
+        & pl.col("full_path").is_not_null(),
     ).with_columns(_candidate=candidate)
     # only ONT duplex reads will have dx SAM tag
     # TODO
@@ -292,7 +293,7 @@ def prepare_reads(
         df = pl.concat(
             [df_valid_reads, df.filter(~pl.col("_candidate"))], how="diagonal"
         )
-    # TODO
+    # calculate qs if it was not already present in input
     if "qs" not in df.columns and "read_phred" in df.columns:
         df = df.with_columns(qs=pl.col("read_phred").list.mean().cast(pl.Float32))
     df = df.select(pl.all().exclude("_candidate"))
