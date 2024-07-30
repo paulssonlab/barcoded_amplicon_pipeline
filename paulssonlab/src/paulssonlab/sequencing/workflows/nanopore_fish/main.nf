@@ -95,8 +95,8 @@ workflow NANOPORE_FISH {
         if (!["basecall", *REQUIRED_INPUTS].collect { k -> it[k] }.any()) {
             throw new Exception("missing any pipeline input")
         }
-        if (!(it.output in ["pod5", "basecaller", "prepare_reads", "consensus", "join_gaf_variants", "extract_segments"])) {
-            throw new Exception("output must be one of: pod5, basecaller, prepare_reads, consensus, join_gaf_variants, extract_segments")
+        if (!(it.output in ["pod5", "basecaller", "prepare_reads", "prepare_consensus", "consensus", "join_gaf_variants", "extract_segments"])) {
+            throw new Exception("output must be one of: pod5, basecaller, prepare_reads, prepare_consensus, consensus, join_gaf_variants, extract_segments")
         }
         if (it.pod5_chunk && ([it.pod5_chunk_files, it.pod5_chunk_bytes].collect { v -> v ? 1 : 0 }.sum() != 1)) {
             throw new Exception("exactly one of pod5_chunk_files or pod5_chunk_bytes must be specified if pod5_chunk=true")
@@ -570,7 +570,14 @@ workflow NANOPORE_FISH {
             }
         }
     }
-    ch_did_prepare_consensus.mix(ch_input_type.prepare_consensus.map { [*:it, prepare_consensus_output: it.prepare_consensus_input] })
+    ch_input_type.prepare_consensus.map { [*:it, prepare_consensus_output: it.prepare_consensus_input] }
+    .set { ch_input_prepare_consensus }
+    ch_did_prepare_consensus.branch {
+        no: it.output == "prepare_consensus"
+        yes: true
+    }
+    .set { ch_process_prepare_consensus }
+    ch_process_prepare_consensus.yes.mix(ch_input_prepare_consensus)
     .set { ch_prepare_consensus }
     map_call_process(CONSENSUS_PREPARED,
         ch_prepare_consensus,
