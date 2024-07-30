@@ -18,7 +18,9 @@ from paulssonlab.sequencing.processing import (
     unique_segments,
 )
 from paulssonlab.sequencing.util import detect_format
-from paulssonlab.util.cli import parse_kv
+from paulssonlab.util.cli import parse_kv, split_delimited_list
+
+DEFAULT_FLAG_COLUMNS = ["is_primary_alignment", "end_to_end", "is_valid"]
 
 
 def compute_consensus_seqs(
@@ -44,6 +46,7 @@ def compute_consensus_seqs(
     exclude_prefix=None,
     max_divergence=None,
     skip_consensus=False,
+    flag_columns=DEFAULT_FLAG_COLUMNS,
     segments_struct="grouping_segments",
     variant_sep="=",
 ):
@@ -71,12 +74,10 @@ def compute_consensus_seqs(
         # TODO
         # df_columns = df.collect_schema().names()
         df_columns = df.columns
-        if "is_primary_alignment" in df_columns:
-            df = df.filter(pl.col("is_primary_alignment"))
-        if "end_to_end" in df_columns:
-            df = df.filter(pl.col("end_to_end"))
-        if "is_valid" in df_columns:
-            df = df.filter(pl.col("is_valid"))
+        if not skip_consensus:
+            for col in flag_columns:
+                if col in df_columns:
+                    df = df.filter(pl.col(col))
         if group:
             if hash_column is not None and hash_column in df_columns:
                 hash_expr = pl.col(hash_column)
@@ -124,6 +125,8 @@ def compute_consensus_seqs(
             "grouping_duplex_depth",
             segments_struct,
         ]
+        if skip_consensus and flag_columns:
+            column_order.extend(flag_columns)
         columns = set(column_order)
         if not skip_consensus:
             columns.discard(segments_struct)
@@ -216,6 +219,13 @@ def _parse_group(ctx, param, value):
 @filter_gfa_options
 @click.option("--max-divergence", type=float)
 @click.option("--skip-consensus", is_flag=True)
+@click.option(
+    "--filter-flag",
+    default=DEFAULT_FLAG_COLUMNS,
+    multiple=True,
+    callback=split_delimited_list,
+)
+@click.option("--no-filter-flag", is_flag=True)
 @click.option("--segments-struct", default="grouping_segments")
 @click.option("--variant-sep", default="=")
 @click.option("--no-variant-sep", is_flag=True)
@@ -244,6 +254,8 @@ def cli(
     exclude_prefix,
     max_divergence,
     skip_consensus,
+    filter_flag,
+    no_filter_flag,
     segments_struct,
     variant_sep,
     no_variant_sep,
@@ -271,6 +283,7 @@ def cli(
         exclude_prefix,
         max_divergence,
         skip_consensus,
+        [] if no_filter_flag else filter_flag,
         segments_struct,
         None if no_variant_sep else variant_sep,
     )
