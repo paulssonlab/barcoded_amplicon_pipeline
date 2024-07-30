@@ -224,24 +224,27 @@ def compute_divergences(df, segments, struct_name=None):
     return df
 
 
-def unique_segments(df, col):
+def unique_segments(df, col, variant_sep=None):
     if isinstance(col, str):
         col = pl.col(col)
-    segments = df.select(
-        col.explode()
-        .cast(pl.String)
-        .str.slice(1, None)
-        .str.split("=")
-        .list.get(0)
-        .unique()
-        .alias("segment")
-    )
+    col = col.explode().cast(pl.String).str.slice(1, None)
+    if variant_sep:
+        col = col.str.split(variant_sep).list.get(0)
+    segments = df.select(col.unique().alias("segment"))
     if hasattr(segments, "collect"):
         segments = segments.collect()
     return segments.to_series().to_list()
 
 
-def prepare_reads(df, forward_segments, endpoints, name_to_seq, max_divergence=None):
+def prepare_reads(
+    df,
+    forward_segments,
+    endpoints,
+    name_to_seq,
+    max_divergence=None,
+    segments_struct="grouping_segments",
+    variant_sep="=",
+):
     df = normalize_paths(df, forward_segments)
     df = df.with_columns(path_hash=categorical_list_hash(pl.col("path")))
     df = flag_end_to_end(df, endpoints)
@@ -259,9 +262,10 @@ def prepare_reads(df, forward_segments, endpoints, name_to_seq, max_divergence=N
         path_start_column="path_start",
         path_end_column="path_end",
         keep_full=True,
-        struct_name="extract_segments",
+        struct_name=segments_struct,
         cut_cigar_kwargs=dict(
             key_sep="|",
+            variant_sep=variant_sep,
             return_indices=False,
             return_counts=True,
             return_cigars=False,
@@ -274,9 +278,8 @@ def prepare_reads(df, forward_segments, endpoints, name_to_seq, max_divergence=N
     # otherwise --max-divergence need only be passed to consensus.py when computing consensus seqs
     candidate = pl.col("is_primary_alignment") & pl.col("end_to_end")
     if max_divergence is not None:
-        df = compute_divergences(
-            df, [s[1:] for s in forward_segments], struct_name="extract_segments"
-        )
+        divergence_segments = [s[1:] for s in forward_segments]
+        df = compute_divergences(df, divergence_segments, struct_name=segments_struct)
         candidate = candidate & (pl.col("max_divergence") <= max_divergence)
     df = df.with_columns(
         is_primary_alignment=pl.col("name").is_first_distinct(),
@@ -324,6 +327,7 @@ def find_duplex_pairs(
     endpoints=None,
     max_divergence=None,
     name_to_seq=None,
+    segments_struct="grouping_segments",
 ):
     (
         path_filter,
@@ -363,7 +367,7 @@ def find_duplex_pairs(
             path_start_column="path_start",
             path_end_column="path_end",
             keep_full=True,
-            struct_name="extract_segments",
+            struct_name=segments_struct,
             cut_cigar_kwargs=dict(
                 key_sep="|",
                 return_indices=False,
@@ -374,7 +378,7 @@ def find_duplex_pairs(
             ),
         )
         df = compute_divergences(
-            df, [s[1:] for s in forward_segments], struct_name="extract_segments"
+            df, [s[1:] for s in forward_segments], struct_name=segments_struct
         )
         df = df.filter(pl.col("max_divergence") <= max_divergence)
     df_sorted = df.sort("st")

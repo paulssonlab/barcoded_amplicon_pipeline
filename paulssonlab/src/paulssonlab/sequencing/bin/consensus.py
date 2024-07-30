@@ -44,6 +44,8 @@ def compute_consensus_seqs(
     exclude_prefix=None,
     max_divergence=None,
     skip_consensus=False,
+    segments_struct="grouping_segments",
+    variant_sep="=",
 ):
     if not input_filename:
         return  # no op if given no input
@@ -93,8 +95,12 @@ def compute_consensus_seqs(
                     exclude=exclude,
                     exclude_prefix=exclude_prefix,
                 )
+                if variant_sep:
+                    selected_segments = list(
+                        set([s.split(variant_sep)[0] for s in selected_segments])
+                    )
                 df = compute_divergences(
-                    df, selected_segments, struct_name="extract_segments"
+                    df, selected_segments, struct_name=segments_struct
                 )
             df = df.filter(pl.col("max_divergence") <= max_divergence)
         depth_columns = compute_depth(df, over="path", prefix="grouping_")
@@ -116,11 +122,11 @@ def compute_consensus_seqs(
             "dx",
             "grouping_depth",
             "grouping_duplex_depth",
-            "extract_segments",
+            segments_struct,
         ]
         columns = set(column_order)
         if not skip_consensus:
-            columns.discard("extract_segments")
+            columns.discard(segments_struct)
         # TODO
         # df_columns = df.collect_schema().names()
         df_columns = df.columns
@@ -210,6 +216,9 @@ def _parse_group(ctx, param, value):
 @filter_gfa_options
 @click.option("--max-divergence", type=float)
 @click.option("--skip-consensus", is_flag=True)
+@click.option("--segments-struct", default="grouping_segments")
+@click.option("--variant-sep", default="=")
+@click.option("--no-variant-sep", is_flag=True)
 @click.argument("input", type=str, nargs=-1)
 def cli(
     input,
@@ -235,6 +244,9 @@ def cli(
     exclude_prefix,
     max_divergence,
     skip_consensus,
+    segments_struct,
+    variant_sep,
+    no_variant_sep,
 ):
     compute_consensus_seqs(
         input,
@@ -259,6 +271,8 @@ def cli(
         exclude_prefix,
         max_divergence,
         skip_consensus,
+        segments_struct,
+        None if no_variant_sep else variant_sep,
     )
 
 

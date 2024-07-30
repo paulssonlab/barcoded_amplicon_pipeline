@@ -95,11 +95,12 @@ def extract_segments(
 @click.option("--path-start-col", default="path_start")
 @click.option("--path-end-col", default="path_end")
 @click.option("--pad-alignment", is_flag=True)
-@click.option("--output-struct", default="extract_segments")
-@click.option("--no-output-struct", is_flag=True)
+@click.option("--segments-struct", default="variants_segments")
+@click.option("--no-segments-struct", is_flag=True)
 @click.option("--keep-full/--no-keep-full", default=True)
 @click.option("-s", "--segments", multiple=True, callback=split_delimited_list)
 @click.option("--variant-sep", default="=")
+@click.option("--no-variant-sep", is_flag=True)
 @click.option("--column-sep", default="|")
 @click.option("--indices/--no-indices", default=False)
 @click.option("--counts/--no-counts", default=True)
@@ -126,11 +127,12 @@ def cli(
     path_start_col,
     path_end_col,
     pad_alignment,
-    output_struct,
-    no_output_struct,
+    segments_struct,
+    no_segments_struct,
     keep_full,
     segments,
     variant_sep,
+    no_variant_sep,
     column_sep,
     indices,
     counts,
@@ -153,12 +155,12 @@ def cli(
         None if not pad_alignment else query_length_col,
         None if not pad_alignment else path_start_col,
         None if not pad_alignment else path_end_col,
-        None if no_output_struct else output_struct,
+        None if no_segments_struct else segments_struct,
         keep_full,
         dict(
             # cut_cigar will return empty output if segments is an empty list
             segments=segments or None,
-            variant_sep=variant_sep,
+            variant_sep=None if no_variant_sep else variant_sep,
             key_sep=column_sep,
             return_indices=indices,
             return_counts=counts,

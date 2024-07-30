@@ -31,6 +31,8 @@ def prepare_reads(
     exclude,
     exclude_prefix,
     max_divergence,
+    segments_struct,
+    variant_sep,
 ):
     input_format = detect_format(
         input_format,
@@ -54,7 +56,13 @@ def prepare_reads(
         elif input_format == "parquet":
             df = pl.concat([pl.scan_parquet(f) for f in input_filename], how="diagonal")
         df = _prepare_reads(
-            df, forward_segments, endpoints, name_to_seq, max_divergence
+            df,
+            forward_segments,
+            endpoints,
+            name_to_seq,
+            max_divergence,
+            segments_struct=segments_struct,
+            variant_sep=variant_sep,
         )
         df = df.collect()
         if output_format == "arrow":
@@ -77,6 +85,8 @@ def prepare_reads(
 @filter_gfa_options
 @click.option("--gfa", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option("--max-divergence", type=float)
+@click.option("--variant-sep", default="=")
+@click.option("--no-variant-sep", is_flag=True)
 @click.argument("input", type=click.Path(exists=True, dir_okay=False), nargs=-1)
 @click.argument("output", type=click.Path())
 def cli(
@@ -90,6 +100,9 @@ def cli(
     exclude,
     exclude_prefix,
     max_divergence,
+    segments_struct,
+    variant_sep,
+    no_variant_sep,
 ):
     prepare_reads(
         gfa,
@@ -102,6 +115,8 @@ def cli(
         exclude,
         exclude_prefix,
         max_divergence,
+        segments_struct,
+        None if no_variant_sep else variant_sep,
     )
 
 
