@@ -85,6 +85,7 @@ def prepare_reads(
 @filter_gfa_options
 @click.option("--gfa", type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option("--max-divergence", type=float)
+@click.option("--segments-struct", default="grouping_segments")
 @click.option("--variant-sep", default="=")
 @click.option("--no-variant-sep", is_flag=True)
 @click.argument("input", type=click.Path(exists=True, dir_okay=False), nargs=-1)
