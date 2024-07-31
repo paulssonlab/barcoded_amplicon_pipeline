@@ -52,7 +52,7 @@ process PREPARE_READS {
     tag "$meta.id"
 
     time 60.min
-    memory { 8.GB + 16.GB * (task.attempt - 1) }
+    memory { 24.GB + 16.GB * (task.attempt - 1) }
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)

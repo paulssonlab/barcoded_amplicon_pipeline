@@ -1,8 +1,3 @@
-tsv = """\
-max_divergence
-0.3
-"""
-
 [defaults]
 fastq_input = "fastq_chunked/*.fastq.gz"
 basecall = false
@@ -20,3 +15,11 @@ consensus_jobs_per_align_job = 20
 find_duplex_pairs_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
 prepare_reads_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
 run_path = "max_divergence=${max_divergence}"
+max_divergence = 0.3
+
+[[params]]
+gfa_grouping = "/home/jqs1/scratch/sequencing/sequencing_references/pLIB473-476.gfa"
+find_duplex_pairs_args = ""
+prepare_reads_args = ""
+run_path = "grouping_all_div0.3"
+output = "prepare_consensus"

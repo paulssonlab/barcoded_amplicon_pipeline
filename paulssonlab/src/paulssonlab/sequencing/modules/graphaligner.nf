@@ -3,6 +3,7 @@ process GRAPHALIGNER {
 
     time 60.min
     memory 1.GB
+    maxRetries 0
 
     input:
     tuple val(meta), path(reads), path(gfa)
