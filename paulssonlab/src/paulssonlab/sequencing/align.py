@@ -130,6 +130,15 @@ def pairwise_align(
     upper=True,
     **kwargs,
 ):
+    if not query or not ref:
+        return dict(
+            score=None,
+            cigar=None,
+            query_start=None,
+            query_end=None,
+            ref_start=None,
+            ref_end=None,
+        )
     if upper:
         ref = ref.upper()
         query = query.upper()

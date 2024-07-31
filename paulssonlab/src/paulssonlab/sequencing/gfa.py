@@ -191,6 +191,8 @@ def gfa_name_mapping(gfa):
 
 
 def assemble_seq_from_path(name_to_seq, path):
+    if path is None:
+        return ""
     if isinstance(name_to_seq, Gfa):
         name_to_seq = gfa_name_mapping(name_to_seq)
     return "".join(name_to_seq[segment] for segment in path)
