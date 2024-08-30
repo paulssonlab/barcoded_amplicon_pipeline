@@ -67,10 +67,15 @@ def compute_consensus_seqs(
     with pl.StringCache():
         # TODO: waiting on Polars to support streaming this query
         if input_format == "arrow":
-            df = pl.concat([pl.scan_ipc(f) for f in input_filename], how="diagonal")
+            df_input = pl.concat(
+                [pl.scan_ipc(f) for f in input_filename], how="diagonal"
+            )
         elif input_format == "parquet":
-            df = pl.concat([pl.scan_parquet(f) for f in input_filename], how="diagonal")
-        df = df.filter(pl.col("path").is_not_null())
+            df_input = pl.concat(
+                [pl.scan_parquet(f) for f in input_filename], how="diagonal"
+            )
+        df_input = df_input.with_columns(_idx=pl.int_range(pl.len(), dtype=pl.UInt64))
+        df = df_input
         # TODO
         # df_columns = df.collect_schema().names()
         df_columns = df.columns
@@ -78,11 +83,11 @@ def compute_consensus_seqs(
             for col in flag_columns:
                 if col in df_columns:
                     df = df.filter(pl.col(col))
+        if hash_column is not None and hash_column in df_columns:
+            hash_expr = pl.col(hash_column)
+        else:
+            hash_expr = categorical_list_hash(pl.col("path"))
         if group:
-            if hash_column is not None and hash_column in df_columns:
-                hash_expr = pl.col(hash_column)
-            else:
-                hash_expr = categorical_list_hash(pl.col("path"))
             df = df.filter(hash_expr % group[1] == group[0])
         if max_length:
             df = df.filter(pl.col("read_seq").str.len_bytes() <= max_length)
@@ -111,6 +116,26 @@ def compute_consensus_seqs(
             df = df.filter(depth_columns["grouping_depth"] >= min_depth)
         if min_duplex_depth and "grouping_duplex_depth" in depth_columns:
             df = df.filter(depth_columns["grouping_duplex_depth"] >= min_duplex_depth)
+        if skip_consensus and limit_depth:
+            # if we are not computing consensuses, we still include more than limit_depth number of reads
+            # but set their read_seq and read_phred to null.
+            # we do this so that a single group's output file won't be huge/won't fit in memory if one or a handful of paths
+            # have abnormally high number of corresponding reads
+            # TODO
+            # the obvious way to do this is:
+            # df = df.select(pl.all().head(limit_depth).over(hash_expr, mapping_strategy="explode"))
+            # but this doesn't reduce memory usage. I also tried:
+            # idx = pl.int_range(pl.len(), dtype=pl.UInt32)
+            # df = df.with_columns(
+            #     **{c: pl.when(idx < limit_depth).then(pl.col(c)).otherwise(pl.lit(None)).over(hash_expr, mapping_strategy="explode") for c in ("grouping_segments", "read_seq", "read_phred")}
+            # )
+            # which also did not help. so instead we do this (see also .join(...) below)
+            df = df.select(
+                pl.all()
+                .exclude(segments_struct, "read_seq", "read_phred")
+                .head(limit_depth)
+                .over(hash_expr, mapping_strategy="explode")
+            )
         column_order = [
             "name",
             "path",
@@ -138,8 +163,15 @@ def compute_consensus_seqs(
         if "rq" in columns:
             # PacBio CCS uses the "qs" tag for something else, so ignore if "rq" is present
             columns.discard("qs")
+        if skip_consensus and limit_depth:
+            df_join = df_input.select(
+                pl.col("_idx", segments_struct, "read_seq", "read_phred")
+            )  # .head(1_000).collect()
+            df = df.join(df_join, on="_idx", how="left", coalesce=True)  # .lazy()
+            df = df.select(pl.col(sorted(columns, key=column_order.index)))
         df = df.select(pl.col(sorted(columns, key=column_order.index)))
         if not skip_consensus:
+            df = df.filter(pl.col("read_seq").is_not_null())
             # path is already included by group_by
             agg_columns = sorted(
                 set(["path_hash", "grouping_depth", "grouping_duplex_depth"]) & columns,
@@ -176,8 +208,12 @@ def compute_consensus_seqs(
                 )
         if output_format == "arrow":
             df.write_ipc(output_filename)
+            # TODO: try streaming?
+            # df.sink_ipc(output_filename)
         elif output_format == "parquet":
             df.write_parquet(output_filename)
+            # TODO: try streaming?
+            # df.sink_parquet(output_filename)
 
 
 def _parse_group(ctx, param, value):
