@@ -116,6 +116,9 @@ def compute_consensus_seqs(
             df = df.filter(depth_columns["grouping_depth"] >= min_depth)
         if min_duplex_depth and "grouping_duplex_depth" in depth_columns:
             df = df.filter(depth_columns["grouping_duplex_depth"] >= min_duplex_depth)
+        if skip_consensus:
+            # TODO
+            limit_depth = None
         if skip_consensus and limit_depth:
             # if we are not computing consensuses, we still include more than limit_depth number of reads
             # but set their read_seq and read_phred to null.
@@ -130,11 +133,21 @@ def compute_consensus_seqs(
             #     **{c: pl.when(idx < limit_depth).then(pl.col(c)).otherwise(pl.lit(None)).over(hash_expr, mapping_strategy="explode") for c in ("grouping_segments", "read_seq", "read_phred")}
             # )
             # which also did not help. so instead we do this (see also .join(...) below)
+            # df = df.select(
+            #     pl.all()
+            #     .exclude(segments_struct, "read_seq", "read_phred")
+            #     .head(limit_depth)
+            #     .over(hash_expr, mapping_strategy="explode")
+            # )
             df = df.select(
-                pl.all()
-                .exclude(segments_struct, "read_seq", "read_phred")
+                pl.col("_idx")
                 .head(limit_depth)
                 .over(hash_expr, mapping_strategy="explode")
+            )
+            idxs = df.collect()["_idx"]
+            print("IDXS COLLECTED")
+            df = df_input.select("_idx", "read_seq", "read_phred").filter(
+                pl.col("_idx").is_in(idxs)
             )
         column_order = [
             "name",
@@ -155,6 +168,16 @@ def compute_consensus_seqs(
         columns = set(column_order)
         if not skip_consensus:
             columns.discard(segments_struct)
+        # if skip_consensus and limit_depth:
+        #     df_join = df_input.select(
+        #         pl.col("_idx", segments_struct, "read_seq", "read_phred")
+        #     )
+        #     df = df.select(pl.col("_idx", *sorted(columns & set(df.columns) - set([segments_struct, "read_seq", "read_phred"]), key=column_order.index)))
+        #     df = df.collect().lazy()
+        #     print("COLLECTED")
+        #     df = df.join(df_join, on="_idx", how="left", coalesce=True)
+        #     df = df.collect()
+        #     print("JOIN COLLECTED")
         # TODO
         # df_columns = df.collect_schema().names()
         df_columns = df.columns
@@ -163,12 +186,6 @@ def compute_consensus_seqs(
         if "rq" in columns:
             # PacBio CCS uses the "qs" tag for something else, so ignore if "rq" is present
             columns.discard("qs")
-        if skip_consensus and limit_depth:
-            df_join = df_input.select(
-                pl.col("_idx", segments_struct, "read_seq", "read_phred")
-            )  # .head(1_000).collect()
-            df = df.join(df_join, on="_idx", how="left", coalesce=True)  # .lazy()
-            df = df.select(pl.col(sorted(columns, key=column_order.index)))
         df = df.select(pl.col(sorted(columns, key=column_order.index)))
         if not skip_consensus:
             df = df.filter(pl.col("read_seq").is_not_null())
