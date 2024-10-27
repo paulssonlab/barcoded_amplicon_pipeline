@@ -77,7 +77,9 @@ process PREPARE_CONSENSUS {
     tag "$meta.id"
 
     time 240.min
-    memory { 8.GB + 16.GB * (task.attempt - 1) }
+    memory { 20.GB + 16.GB * (task.attempt - 1) }
+    maxErrors 20
+    maxRetries 2 // TODO
 
     input:
     tuple val(meta), path(input, stageAs: "input/*")
@@ -105,6 +107,8 @@ process CONSENSUS_PREPARED {
 
     time 240.min
     memory { 8.GB + 16.GB * (task.attempt - 1) }
+    maxErrors 20
+    maxRetries 2 // TODO
 
     input:
     tuple val(meta), path(input, stageAs: "input/*")
@@ -116,6 +120,9 @@ process CONSENSUS_PREPARED {
 
     script:
     """
+    echo FOO 2>&1
+    hostname -a 2>&1
+    echo BAR 2>&1
     ${src}/sequencing/bin/consensus.py ${meta.consensus_args ?: ""} --input-format ${meta.input_format} --output-format ${meta.output_format} --output ${meta.id}.${meta.output_format} --fasta ${meta.id}.fasta ${input}
     """
 
@@ -130,7 +137,9 @@ process CONSENSUS {
     tag "$meta.id"
 
     time 240.min
-    memory { 8.GB + 16.GB * (task.attempt - 1) }
+    memory { 20.GB + 16.GB * (task.attempt - 1) }
+    maxErrors 20
+    maxRetries 2 // TODO
 
     input:
     tuple val(meta), path(input, stageAs: "input/*")
@@ -156,7 +165,7 @@ process REALIGN {
     tag "$meta.id"
 
     time 120.min
-    memory { 1.GB + 7.GB * (task.attempt - 1) }
+    memory { 4.GB + 8.GB * (task.attempt - 1) }
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)
@@ -181,7 +190,7 @@ process EXTRACT_SEGMENTS {
     tag "$meta.id"
 
     time 60.min
-    memory { 2.GB + 6.GB * (task.attempt - 1) }
+    memory { 8.GB + 8.GB * (task.attempt - 1) }
 
     input:
     tuple val(meta), path(input, stageAs: "input/*"), path(gfa)
