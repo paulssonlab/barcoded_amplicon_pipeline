@@ -17,7 +17,7 @@ dependencies:
   - pip:
     - pywfa
   - polars-u64-idx=0.20.31
-  - pyabpoa
+  - pyabpoa=1.5.2=py312he57d009_0 # TODO: waiting on https://github.com/yangao07/abPOA/issues/75
   - pyarrow
   - pysam
   - pyspoa
