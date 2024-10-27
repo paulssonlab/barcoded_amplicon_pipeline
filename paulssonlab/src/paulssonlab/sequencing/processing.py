@@ -432,8 +432,8 @@ def compute_depth(df, over=None, prefix=None, suffix=None):
 def map_read_groups(
     df,
     func,
-    group_by_column="path",
     *agg_exprs,
+    group_by_column="path",
     max_group_size=None,
     input_columns=["name", "read_seq", "read_phred", "reverse_complement"],
 ):
