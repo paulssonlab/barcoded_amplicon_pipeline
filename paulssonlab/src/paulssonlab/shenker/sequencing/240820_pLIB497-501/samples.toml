@@ -1,0 +1,18 @@
+[defaults]
+fastq_input = "fastq_chunked/*.fastq.gz"
+basecall = false
+#pod5_input = "pod5_split/*.pod5"
+pod5_chunk = false
+pod5_split = false
+dorado_model = "dna_r10.4.1_e8.2_400bps_sup@v5.0.0"
+dorado_duplex_model = "dna_r10.4.1_e8.2_5khz_stereo@v1.3"
+gfa_grouping = "/home/jqs1/scratch/sequencing/sequencing_references/barcode.gfa"
+gfa_variants = "/home/jqs1/scratch/sequencing/sequencing_references/pLIB492-501.gfa"
+consensus_args = "--method abpoa --no-phred-output --max-length 10000 --max-divergence ${max_divergence}"
+consensus_jobs = 400
+consensus_jobs_per_align_job = 8
+#output = "prepare_reads"
+find_duplex_pairs_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
+prepare_reads_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
+run_path = "max_divergence=${max_divergence}"
+max_divergence = 0.3
