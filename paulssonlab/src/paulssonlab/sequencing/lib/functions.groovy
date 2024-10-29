@@ -1,6 +1,7 @@
 import java.nio.file.Paths
 import java.nio.file.Files
 import java.nio.file.FileSystems
+import java.nio.file.FileVisitOption
 import groovy.transform.Field // SEE: https://stackoverflow.com/a/31301183
 import org.codehaus.groovy.runtime.InvokerHelper
 import com.google.common.hash.Hasher
@@ -96,7 +97,8 @@ static def glob(base, pattern) {
     def paths = []
     def path_matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern)
     base = file(base).toAbsolutePath()
-    Files.walk(base).forEach { abs_path ->
+    // using 10 as a reasonable max depth to avoid infinite recursion
+    Files.walk(base, 10, FileVisitOption.FOLLOW_LINKS).forEach { abs_path ->
         def rel_path = base.relativize(abs_path)
         if (path_matcher.matches(rel_path)) {
             paths << abs_path
