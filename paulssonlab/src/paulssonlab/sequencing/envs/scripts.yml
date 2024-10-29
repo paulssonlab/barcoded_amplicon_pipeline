@@ -16,10 +16,10 @@ dependencies:
   - pip
   - pip:
     - pywfa
-  - polars-u64-idx=0.20.31
+  - polars-u64-idx
   - pyabpoa=1.5.2=py312he57d009_0 # TODO: waiting on https://github.com/yangao07/abPOA/issues/75
   - pyarrow
   - pysam
   - pyspoa
-  - python=3.12.4
+  - python
   # - pywfa # conda version has an unnecessary python <3.9 pin, so we install via pip instead
