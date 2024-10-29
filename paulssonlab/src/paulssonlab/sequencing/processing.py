@@ -286,15 +286,14 @@ def prepare_reads(
         & pl.col("full_path").is_not_null(),
     ).with_columns(_candidate=candidate)
     # only ONT duplex reads will have dx SAM tag
-    # TODO
-    # if "dx" in df.collect_schema().names():
-    if "dx" in df.columns:
+    df_columns = df.collect_schema().names()
+    if "dx" in df_columns:
         df_valid_reads = flag_valid_ont_duplex_reads(df.filter(pl.col("_candidate")))
         df = pl.concat(
             [df_valid_reads, df.filter(~pl.col("_candidate"))], how="diagonal"
         )
     # calculate qs if it was not already present in input
-    if "qs" not in df.columns and "read_phred" in df.columns:
+    if "qs" not in df_columns and "read_phred" in df_columns:
         df = df.with_columns(qs=pl.col("read_phred").list.mean().cast(pl.Float32))
     df = df.select(pl.all().exclude("_candidate"))
     return df
@@ -420,9 +419,7 @@ def compute_depth(df, over=None, prefix=None, suffix=None):
             return expr
 
     exprs = {format_column("depth"): wrap_over(pl.len()).alias(format_column("depth"))}
-    # TODO
-    # if "dx" in df.collect_schema().names():
-    if "dx" in df.columns:
+    if "dx" in df.collect_schema().names():
         exprs[format_column("duplex_depth")] = wrap_over(
             (pl.col("dx") == 1).sum().alias(format_column("duplex_depth"))
         )
@@ -444,9 +441,7 @@ def map_read_groups(
     def _limit_group(expr):
         sort_columns = []
         descending = []
-        # TODO
-        # df_columns = df.collect_schema().names()
-        df_columns = df.columns
+        df_columns = df.collect_schema().names()
         # PacBio: prefer high-accuracy CCS reads
         if "rq" in df_columns:
             sort_columns = ["rq", *sort_columns]
@@ -691,9 +686,7 @@ def cut_cigar_df(
     if isinstance(name_to_seq, Gfa):
         name_to_seq = gfa_name_mapping(name_to_seq)
     exclude_columns = []
-    # TODO
-    # df_columns = df.collect_schema().names()
-    df_columns = df.columns
+    df_columns = df.collect_schema().names()
     if path_column not in df_columns:
         raise ValueError(f"missing column {path_column}")
     if cigar_column not in df_columns:
@@ -710,9 +703,7 @@ def cut_cigar_df(
     _include_column(struct, None, df_columns, path_end_column, "path_end")
     if keep_full:
         exclude_columns = []
-    # TODO
-    # df_schema = df.collect_schema()
-    df_schema = df.schema
+    df_schema = df.collect_schema()
     dtype = _cut_cigar_dtype(
         [s[1:] for s in name_to_seq.keys()],
         sequence_dtype=df_schema.get(sequence_column),

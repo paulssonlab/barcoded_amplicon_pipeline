@@ -67,28 +67,37 @@ def compute_consensus_seqs(
     with pl.StringCache():
         # TODO: waiting on Polars to support streaming this query
         if input_format == "arrow":
-            df_input = pl.concat(
-                [pl.scan_ipc(f) for f in input_filename], how="diagonal"
-            )
+            df_inputs = [pl.scan_ipc(f) for f in input_filename]
         elif input_format == "parquet":
-            df_input = pl.concat(
-                [pl.scan_parquet(f) for f in input_filename], how="diagonal"
-            )
-        df_input = df_input.with_columns(_idx=pl.int_range(pl.len(), dtype=pl.UInt64))
-        df = df_input
-        # TODO
-        # df_columns = df.collect_schema().names()
-        df_columns = df.columns
-        if not skip_consensus:
-            for col in flag_columns:
-                if col in df_columns:
-                    df = df.filter(pl.col(col))
+            df_inputs = [pl.scan_parquet(f) for f in input_filename]
+        df_columns = df_inputs[0].collect_schema().names()
         if hash_column is not None and hash_column in df_columns:
             hash_expr = pl.col(hash_column)
         else:
             hash_expr = categorical_list_hash(pl.col("path"))
-        if group:
-            df = df.filter(hash_expr % group[1] == group[0])
+        ###
+        # TODO: memory management issue in polars/jemalloc: https://github.com/pola-rs/polars/issues/19497
+        # so instead of executing the entire query lazily, we prefilter all input tables
+        # one-by-one for rows with the correct group, then concat those dataframes
+        # and execute the rest of the query on that
+        # once this is fixed, the following line can replace everything between BEGIN/END WORKAROUND
+        # df = pl.concat(df_inputs, how="diagonal")
+        ### BEGIN WORKAROUND
+        dfs = []
+        for i, df in enumerate(df_inputs):
+            if group:
+                df = df.filter(hash_expr % group[1] == group[0])
+            # TODO: round-tripping through arrow
+            df = pl.from_arrow(df.collect().to_arrow()).lazy()
+            # when bug is fixed, we should do this instead:
+            # df = df.collect().lazy()
+            dfs.append(df)
+        df = pl.concat(dfs, how="diagonal")
+        ### END WORKAROUND
+        if not skip_consensus:
+            for col in flag_columns:
+                if col in df_columns:
+                    df = df.filter(pl.col(col))
         if max_length:
             df = df.filter(pl.col("read_seq").str.len_bytes() <= max_length)
         if max_divergence is not None:
@@ -116,39 +125,24 @@ def compute_consensus_seqs(
             df = df.filter(depth_columns["grouping_depth"] >= min_depth)
         if min_duplex_depth and "grouping_duplex_depth" in depth_columns:
             df = df.filter(depth_columns["grouping_duplex_depth"] >= min_duplex_depth)
-        if skip_consensus:
-            # TODO
-            limit_depth = None
         if skip_consensus and limit_depth:
             # if we are not computing consensuses, we still include more than limit_depth number of reads
             # but set their read_seq and read_phred to null.
             # we do this so that a single group's output file won't be huge/won't fit in memory if one or a handful of paths
             # have abnormally high number of corresponding reads
-            # TODO
-            # the obvious way to do this is:
+            idx = pl.int_range(pl.len(), dtype=pl.UInt64)
+            df = df.with_columns(
+                **{
+                    c: pl.when(idx < limit_depth)
+                    .then(pl.col(c))
+                    .otherwise(pl.lit(None))
+                    .over(hash_expr)
+                    # these are the columns containing most of the bytes
+                    for c in ("grouping_segments", "read_seq", "read_phred")
+                }
+            )
+            # if we wanted to entirely filter out rows beyond limit_depth in each grouping, we could do this instead:
             # df = df.select(pl.all().head(limit_depth).over(hash_expr, mapping_strategy="explode"))
-            # but this doesn't reduce memory usage. I also tried:
-            # idx = pl.int_range(pl.len(), dtype=pl.UInt32)
-            # df = df.with_columns(
-            #     **{c: pl.when(idx < limit_depth).then(pl.col(c)).otherwise(pl.lit(None)).over(hash_expr, mapping_strategy="explode") for c in ("grouping_segments", "read_seq", "read_phred")}
-            # )
-            # which also did not help. so instead we do this (see also .join(...) below)
-            # df = df.select(
-            #     pl.all()
-            #     .exclude(segments_struct, "read_seq", "read_phred")
-            #     .head(limit_depth)
-            #     .over(hash_expr, mapping_strategy="explode")
-            # )
-            df = df.select(
-                pl.col("_idx")
-                .head(limit_depth)
-                .over(hash_expr, mapping_strategy="explode")
-            )
-            idxs = df.collect()["_idx"]
-            print("IDXS COLLECTED")
-            df = df_input.select("_idx", "read_seq", "read_phred").filter(
-                pl.col("_idx").is_in(idxs)
-            )
         column_order = [
             "name",
             "path",
@@ -168,19 +162,7 @@ def compute_consensus_seqs(
         columns = set(column_order)
         if not skip_consensus:
             columns.discard(segments_struct)
-        # if skip_consensus and limit_depth:
-        #     df_join = df_input.select(
-        #         pl.col("_idx", segments_struct, "read_seq", "read_phred")
-        #     )
-        #     df = df.select(pl.col("_idx", *sorted(columns & set(df.columns) - set([segments_struct, "read_seq", "read_phred"]), key=column_order.index)))
-        #     df = df.collect().lazy()
-        #     print("COLLECTED")
-        #     df = df.join(df_join, on="_idx", how="left", coalesce=True)
-        #     df = df.collect()
-        #     print("JOIN COLLECTED")
-        # TODO
-        # df_columns = df.collect_schema().names()
-        df_columns = df.columns
+        df_columns = df.collect_schema().names()
         # set intersections don't preserve order
         columns &= set(df_columns)
         if "rq" in columns:
@@ -264,6 +246,7 @@ def _parse_group(ctx, param, value):
 @click.option("--min-depth", type=int)
 @click.option("--min-duplex-depth", type=int)
 @click.option("--limit-depth", type=int, default=50)  # TODO?
+@click.option("--no-limit_depth", is_flag=True)
 @click.option("--max-length", type=int)
 @click.option("--method", type=click.Choice(["abpoa", "spoa"]), default="abpoa")
 @click.option("--phred-input/--no-phred-input", default=False)  # TODO
@@ -296,6 +279,7 @@ def cli(
     min_depth,
     min_duplex_depth,
     limit_depth,
+    no_limit_depth,
     max_length,
     method,
     phred_input,
@@ -324,7 +308,7 @@ def cli(
         None if no_hash_col else hash_col,
         min_depth,
         min_duplex_depth,
-        limit_depth,
+        None if no_limit_depth else limit_depth,
         max_length,
         method,
         phred_input,
