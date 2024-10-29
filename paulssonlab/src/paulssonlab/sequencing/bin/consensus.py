@@ -22,6 +22,28 @@ from paulssonlab.util.cli import parse_kv, split_delimited_list
 
 DEFAULT_FLAG_COLUMNS = ["is_primary_alignment", "end_to_end", "is_valid"]
 
+LIMIT_DEPTH_COLUMNS = ["grouping_segments", "read_seq", "read_phred"]
+
+
+def limit_group_content(df, columns, group_by, size, fill_value=None):
+    # if we are not computing consensuses, we still include more than limit_depth number of reads
+    # but set their read_seq and read_phred to null.
+    # we do this so that a single group's output file won't be huge/won't fit in memory if one or a handful of paths
+    # have abnormally high number of corresponding reads
+    idx = pl.int_range(pl.len(), dtype=pl.UInt64)
+    return df.with_columns(
+        **{
+            c: pl.when(idx < size)
+            .then(pl.col(c))
+            .otherwise(pl.lit(fill_value))
+            .over(group_by)
+            # these are the columns containing most of the bytes
+            for c in columns
+        }
+    )
+    # if we wanted to entirely filter out rows beyond limit_depth in each grouping, we could do this instead:
+    # df = df.select(pl.all().head(limit_depth).over(hash_expr, mapping_strategy="explode"))
+
 
 def compute_consensus_seqs(
     input_filename,
@@ -84,9 +106,25 @@ def compute_consensus_seqs(
         # df = pl.concat(df_inputs, how="diagonal")
         ### BEGIN WORKAROUND
         dfs = []
-        for i, df in enumerate(df_inputs):
+        for df in df_inputs:
             if group:
                 df = df.filter(hash_expr % group[1] == group[0])
+            if limit_depth:
+                # if there's a single group with a large number of rows
+                # we do this for each input file individually so that we bound memory usage above by
+                # limit_depth * num_input_files * mean_size_per_row
+                # we call limit_group_content again below to ensure that the final output
+                # is bounded by limit_depth * mean_size_per_row
+                # TODO: note that if a single (too-large-for-memory) input file has a large number of rows
+                # that all belong to a single oversized group, we may still run into memory issues
+                # this should be fixed by using df.collect(streaming=True) below once
+                # the streaming engine is implemented for this query
+                # we filter first so that we exclude all rows that were already nulled-out
+                # during loading each input file above
+                df = df.filter(*[pl.col(c).is_not_null() for c in LIMIT_DEPTH_COLUMNS])
+                df = limit_group_content(
+                    df, LIMIT_DEPTH_COLUMNS, hash_expr, limit_depth
+                )
             # TODO: round-tripping through arrow
             df = pl.from_arrow(df.collect().to_arrow()).lazy()
             # when bug is fixed, we should do this instead:
@@ -118,6 +156,12 @@ def compute_consensus_seqs(
                     df, selected_segments, struct_name=segments_struct
                 )
             df = df.filter(pl.col("max_divergence") <= max_divergence)
+        # we want to filter (--min-depth, --min-duplex-depth) on the number of reads
+        # that may be used to construct consensuses (up to --limit-depth), so we need
+        # to compute grouping_depth after filtering on --max-length, --max-divergence
+        # in principle we could also record depths before filtering, but this is not terribly
+        # useful and you can just go back to the output of PREPARE_CONSENSUS and look up group
+        # size for a given path_hash
         depth_columns = compute_depth(df, over="path", prefix="grouping_")
         if not skip_consensus:
             df = df.with_columns(**depth_columns)
@@ -126,23 +170,7 @@ def compute_consensus_seqs(
         if min_duplex_depth and "grouping_duplex_depth" in depth_columns:
             df = df.filter(depth_columns["grouping_duplex_depth"] >= min_duplex_depth)
         if skip_consensus and limit_depth:
-            # if we are not computing consensuses, we still include more than limit_depth number of reads
-            # but set their read_seq and read_phred to null.
-            # we do this so that a single group's output file won't be huge/won't fit in memory if one or a handful of paths
-            # have abnormally high number of corresponding reads
-            idx = pl.int_range(pl.len(), dtype=pl.UInt64)
-            df = df.with_columns(
-                **{
-                    c: pl.when(idx < limit_depth)
-                    .then(pl.col(c))
-                    .otherwise(pl.lit(None))
-                    .over(hash_expr)
-                    # these are the columns containing most of the bytes
-                    for c in ("grouping_segments", "read_seq", "read_phred")
-                }
-            )
-            # if we wanted to entirely filter out rows beyond limit_depth in each grouping, we could do this instead:
-            # df = df.select(pl.all().head(limit_depth).over(hash_expr, mapping_strategy="explode"))
+            df = limit_group_content(df, LIMIT_DEPTH_COLUMNS, hash_expr, limit_depth)
         column_order = [
             "name",
             "path",
