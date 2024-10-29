@@ -248,7 +248,9 @@ def _parse_group(ctx, param, value):
 @click.option("--limit-depth", type=int, default=50)  # TODO?
 @click.option("--no-limit_depth", is_flag=True)
 @click.option("--max-length", type=int)
-@click.option("--method", type=click.Choice(["abpoa", "spoa"]), default="abpoa")
+@click.option(
+    "--method", type=click.Choice(["abpoa", "spoa", "first"]), default="abpoa"
+)
 @click.option("--phred-input/--no-phred-input", default=False)  # TODO
 @click.option("--phred-output/--no-phred-output", default=True)  # TODO
 @click.option("-p", "--param", type=(str, str), multiple=True, callback=parse_kv)

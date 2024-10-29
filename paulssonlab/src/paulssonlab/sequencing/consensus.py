@@ -87,6 +87,11 @@ def poa(
             list(seqs), genmsa=return_msa, **{**SPOA_DEFAULTS, **kwargs}
         )
         consensus_seqs = [consensus_seq]
+    elif method == "first":
+        # return first sequence, used only for debugging
+        consensus_seqs = [seqs[0]]
+        consensus_phreds = [phreds[0]] if phreds else None
+        msa_seqs = None
     else:
         raise ValueError(f"invalid method {method}")
     res = dict(consensus_seqs=consensus_seqs)
