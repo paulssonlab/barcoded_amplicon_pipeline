@@ -22,16 +22,18 @@ dependencies:
   - jupyterlab_code_formatter
   - matplotlib
   - networkx
-  - nextflow
+  - nextflow=24.04.4 # TODO: see https://github.com/nextflow-io/nextflow/issues/5441
   - numba
   - numpy
   - pandas
   - dnaio
   - parasail-python
+  - pip
+  - pip:
+    - pywfa
   - pyabpoa
   - pysam
   - pyspoa
-  - pywfa
   - polars-u64-idx
   - pyarrow
   - python
