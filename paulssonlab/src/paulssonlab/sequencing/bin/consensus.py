@@ -125,6 +125,8 @@ def compute_consensus_seqs(
                 df = limit_group_content(
                     df, LIMIT_DEPTH_COLUMNS, hash_expr, limit_depth
                 )
+            if max_length:
+                df = df.filter(pl.col("read_seq").str.len_bytes() <= max_length)
             # TODO: round-tripping through arrow
             df = pl.from_arrow(df.collect().to_arrow()).lazy()
             # when bug is fixed, we should do this instead:
@@ -136,8 +138,9 @@ def compute_consensus_seqs(
             for col in flag_columns:
                 if col in df_columns:
                     df = df.filter(pl.col(col))
-        if max_length:
-            df = df.filter(pl.col("read_seq").str.len_bytes() <= max_length)
+        # redundant now, but uncomment when above length filtering is removed
+        # if max_length:
+        #     df = df.filter(pl.col("read_seq").str.len_bytes() <= max_length)
         if max_divergence is not None:
             if "max_divergence" not in df_columns:
                 all_segments = unique_segments(df, pl.col("path"))
@@ -273,9 +276,10 @@ def _parse_group(ctx, param, value):
 @click.option("--no-hash-col", is_flag=True)
 @click.option("--min-depth", type=int)
 @click.option("--min-duplex-depth", type=int)
-@click.option("--limit-depth", type=int, default=50)  # TODO?
+@click.option("--limit-depth", type=int, default=50)  # TODO: is this a good default?
 @click.option("--no-limit_depth", is_flag=True)
-@click.option("--max-length", type=int)
+@click.option("--max-length", type=int, default=20_000)
+@click.option("--no-max-length", is_flag=True)
 @click.option(
     "--method", type=click.Choice(["abpoa", "spoa", "first"]), default="abpoa"
 )
@@ -311,6 +315,7 @@ def cli(
     limit_depth,
     no_limit_depth,
     max_length,
+    no_max_length,
     method,
     phred_input,
     phred_output,
@@ -339,7 +344,7 @@ def cli(
         min_depth,
         min_duplex_depth,
         None if no_limit_depth else limit_depth,
-        max_length,
+        None if no_max_length else max_length,
         method,
         phred_input,
         phred_output,
