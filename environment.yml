@@ -1,4 +1,4 @@
-name: shenker-sequencing
+name: barcoded_amplicon_pipeline
 channels:
   - conda-forge
   - bioconda
@@ -38,5 +38,6 @@ dependencies:
   - polars-u64-idx
   - pyarrow
   - python
+  # - pywfa # conda version has an unnecessary python <3.9 pin, so we install via pip instead
   - scipy
   - tqdm
