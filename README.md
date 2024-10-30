@@ -272,7 +272,36 @@ The pipeline can be configured with the following parameters:
 # Troubleshooting
 
 ## Pipeline crashes
-Exit code 137 means a task hit the memory limit, exit code 140 indicates that it hit the time limit. Intermediate files If you want to clear all output and re-run the pipeline from the beginning, run `rm -rf /path/to/data/work`. it may be helpful to clean up log files and reports by running `rm -rf .nextflow*`. TODO.
+If nextflow crashes, look at `out.log` in the run directory and scroll to the bottom. Nextflow should report what task crashed, its working directory, and an exit code. Exit code 137 means a task hit the memory limit, exit code 140 indicates that it hit the time limit. By `cd`-ing into a task's working directory in an interactive job, you can manually try to re-run the task to help identify the issue. If it's a resource limit issue, you can modify the resource limits specified in `paulssonlab/src/paulssonlab/sequencing/modules/scripts.nf` (this shouldn't be necessary). To restart the pipeline after the issue has been addressed, copy the output for the last completed step that preceeded the crash (using `cp -RL`), edit `samples.toml` to specify that copied output as the new input, and then run the pipeline starting from that step. If you want to clear all output and re-run the pipeline from the beginning, run `rm -rf /path/to/data/work` (make sure you copy any outputs from the `path/to/data/output/default/...` directories before you clear the `work` directory, as those outputs live inside the `work` directory). It may be helpful to clean up log files and reports in the run directory by running `rm -rf .nextflow* *.txt *.html *.log`.
+
+For example, let's say that one of the `CONSENSUS_PREPARED` tasks crashed.
+```
+# we look at the log file and scroll to the end
+less out.log
+# inside an interactive job,
+cd /path/to/data/work/04/40f42f4416de54b6e1f723bf12cd7c
+time -v bash .command.sh
+# the time -v command prints duration and peak memory usage, which is useful for checking
+# that resource limits are appropriate
+# let's say this prints out a Python error, we find the bug and fix it
+# then we copy the output of the preeceding step so we can start the pipeline there
+cp -RL /path/to/data/output/default/prepare_consensus /path/to/data/prepare_consensus
+# to prevent the accumulation of large intermediate data files, we clear the work directory
+# make sure you copy all outputs you care about first!
+rm -rf /path/to/data/work
+# now we cd back into our run directory and edit samples.toml
+# so instead of fastq_input="fastq_chunked/*.fastq.gz"
+# we have prepare_consensus_input="prepare_consensus/*.arrow"
+cd /path/to/run
+vim samples.toml
+# sometimes during debugging you accumulate a lot of log file clutter, so we can clear that
+# make sure you don't clear logs you care about!
+rm -rf .nextflow* *.txt *.html *.log
+# now we start the run again
+PIPELINE_ROOT=/home/$USER/barcoded_amplicon_pipeline MAMBA_ALWAYS_YES=true time nextflow run main.nf -profile o2 -with-report -with-timeline > out.log
+```
+
+This process is clunkier than it should be, see [below](#nextflow-run--resume).
 
 # Known issues
 
