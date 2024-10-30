@@ -75,7 +75,7 @@ def prepare_reads(
 @click.option(
     "-i",
     "--input-format",
-    type=click.Choice(["bam", "parquet", "arrow"], case_sensitive=False),
+    type=click.Choice(["parquet", "arrow"], case_sensitive=False),
 )
 @click.option(
     "-o",
