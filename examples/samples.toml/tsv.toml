@@ -1,0 +1,25 @@
+# this is a single-column table listing different values of max_divergence we want to try
+tsv = """\
+max_divergence
+0.01
+0.03
+0.05
+0.07
+0.1
+0.2
+0.3
+1
+"""
+
+[defaults]
+bam_input = "bam_simplex/*.bam"
+basecall = false
+gfa_grouping = "/home/jqs1/scratch/sequencing/sequencing_references/barcode.gfa"
+gfa_variants = "/home/jqs1/scratch/sequencing/sequencing_references/pLIB473-476.gfa"
+consensus_args = "--method abpoa --no-phred-output --max-length 10000 --max-divergence ${max_divergence}"
+consensus_jobs = 100
+consensus_jobs_per_align_job = 20
+find_duplex_pairs_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
+prepare_reads_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
+# output will be stored in directories path/to/data/output/max_divergence=0.01, ...
+run_path = "max_divergence=${max_divergence}"

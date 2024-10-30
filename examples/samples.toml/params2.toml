@@ -1,0 +1,25 @@
+# this is equivalent to params.toml, except it uses string interpolation
+[defaults]
+basecall = false
+gfa_grouping = "/home/jqs1/scratch/sequencing/sequencing_references/barcode.gfa"
+gfa_variants = "/home/jqs1/scratch/sequencing/sequencing_references/pLIB473-476.gfa"
+consensus_jobs = 400
+consensus_jobs_per_align_job = 20
+find_duplex_pairs_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
+prepare_reads_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
+# use parameter substitution
+fastq_input = "${name}/fastq/*.fastq.gz"
+consensus_args = "--method ${consensus_method} --no-phred-output --max-length 10000 --max-divergence 0.3"
+run_path = "consensus_${consensus_method}/${name}"
+
+[[samples]]
+name = "dataset1"
+
+[[samples]]
+name = "dataset2"
+
+[[params]]
+consensus_method = "abpoa"
+
+[[params]]
+consesus_method = "spoa"

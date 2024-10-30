@@ -1,0 +1,25 @@
+# the [defaults] block sets parameters for all samples and run sets
+[defaults]
+basecall = false
+gfa_grouping = "/home/jqs1/scratch/sequencing/sequencing_references/barcode.gfa"
+gfa_variants = "/home/jqs1/scratch/sequencing/sequencing_references/pLIB473-476.gfa"
+consensus_jobs = 400
+consensus_jobs_per_align_job = 20
+find_duplex_pairs_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
+prepare_reads_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
+
+[[samples]]
+name = "dataset1"
+fastq_input = "dataset1/fastq/*.fastq.gz"
+
+[[samples]]
+name = "dataset2"
+fastq_input = "dataset2/fastq/*.fastq.gz"
+
+[[params]]
+consensus_args = "--method abpoa --no-phred-output --max-length 10000 --max-divergence 0.3"
+run_path = "consensus_abpoa"
+
+[[params]]
+consensus_args = "--method spoa --no-phred-output --max-length 10000 --max-divergence 0.3"
+run_path = "consensus_spoa"

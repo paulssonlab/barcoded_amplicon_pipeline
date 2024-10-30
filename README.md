@@ -31,11 +31,11 @@ Because `extract_segments.py` slices sequence regions for each GFA segment, it i
 1. Different paths are taken depending on what type of input is given:
     - FASTQ input (`basecall: false` and `fastq_input` is non-null)
         1. `SAMTOOLS_IMPORT`: Convert input FASTQ to BAM.
-        1. If `publish_bam` is `true`, symlink BAM to `path/to/data/output/RUN_NAME/bam`.
+        1. If `publish_bam` is `true`, symlink BAM to `path/to/data/output/RUN_PATH/bam`.
         1. `GRAPHALIGNER_GROUPING`: Align reads to grouping GFA.
     - BAM input (`basecall: false` and `bam_input` is non-null)
         1. `SAMTOOLS_FASTQ`: Convert input BAM to FASTQ.
-        1. If `publish_fastq` is `true`, symlink FASTQ to `path/to/data/output/RUN_NAME/fastq`.
+        1. If `publish_fastq` is `true`, symlink FASTQ to `path/to/data/output/RUN_PATH/fastq`.
         1. `GRAPHALIGNER_GROUPING`: Align reads to grouping GFA.
     - Raw Oxford Nanopore reads as POD5 input (`basecall: true` and `pod5_input` is non-null)
         1. `POD5_MERGE`: Optionally combine input POD5 files into a smaller number of larger POD5 files.
@@ -45,28 +45,28 @@ Because `extract_segments.py` slices sequence regions for each GFA segment, it i
             - Simplex only (`duplex: false`)
                 1. `DORADO_DOWNLOAD`: Download simplex dorado basecalling model.
                 1. `DORADO_BASECALLER`: Simplex basecall.
-                1. If `publish_bam` is `true`, symlink BAM to `path/to/data/output/RUN_NAME/bam`.
+                1. If `publish_bam` is `true`, symlink BAM to `path/to/data/output/RUN_PATH/bam`.
             - Duplex with dorado pairing (`duplex: true, use_dorado_duplex_pairing: true`)
                 1. `DORADO_DOWNLOAD`: Download simplex dorado basecalling model.
                 1. `DORADO_DOWNLOAD2`: Download duplex dorado basecalling model.
                 1. `DORADO_DUPLEX`: Duplex basecall.
-                1. If `publish_bam` is `true`, symlink BAM to `path/to/data/output/RUN_NAME/bam`.
-                1. If `publish_fastq` is `true`, symlink FASTQ to `path/to/data/output/RUN_NAME/fastq`.
+                1. If `publish_bam` is `true`, symlink BAM to `path/to/data/output/RUN_PATH/bam`.
+                1. If `publish_fastq` is `true`, symlink FASTQ to `path/to/data/output/RUN_PATH/fastq`.
                 1. `GRAPHALIGNER_VARIANTS`: Align reads to grouping GFA.
             - Duplex with non-dorado pairing (`duplex: true, use_dorado_duplex_pairing: false`)
                 1. `DORADO_DOWNLOAD`: Download simplex dorado basecalling model.
                 1. `DORADO_DOWNLOAD2`: Download duplex dorado basecalling model.
                 1. `DORADO_BASECALLER`: Simplex basecall.
-                1. If `publish_bam_simplex` is `true`, symlink BAM to `path/to/data/output/RUN_NAME/bam_simplex`.
+                1. If `publish_bam_simplex` is `true`, symlink BAM to `path/to/data/output/RUN_PATH/bam_simplex`.
                 1. `SAMTOOLS_FASTQ`: Convert simplex BAM to FASTQ.
                 1. `GRAPHALIGNER_GROUPING`: Align simplex reads to grouping GFA.
                 1. `FIND_DUPLEX_PAIRS`: Output a space-separated text file of read ID pairs for valid duplex pairs (a valid duplex pair has two parent reads which align to the same barcode and traversed the same nanopore within a small time delta of each other).
                 1. `DORADO_DUPLEX_WITH_PAIRS`: Duplex basecall only those pairs of reads identified by `FIND_DUPLEX_PAIRS`.
                 1. `SAMTOOLS_MERGE`: Combine simplex and duplex BAMs.
-                1. If `publish_bam` is `true`, symlink BAM to `path/to/data/output/RUN_NAME/fastq`.
+                1. If `publish_bam` is `true`, symlink BAM to `path/to/data/output/RUN_PATH/fastq`.
                 1. `SAMTOOLS_FASTQ_DUPLEX`: Convert duplex BAM to FASTQ.
                 1. `CAT_DUPLEX_FASTQ`: Combine simplex and duplex FASTQs.
-                1. If `publish_fastq` is `true`, symlink FASTQ to `path/to/data/output/RUN_NAME/fastq`.
+                1. If `publish_fastq` is `true`, symlink FASTQ to `path/to/data/output/RUN_PATH/fastq`.
                 1. `GRAPHALIGNER_GROUPING_DUPLEX`: Align duplex reads to grouping GFA.
                 1. `CAT_DUPLEX_GAF`: Combine simplex and duplex GAFs.
 1. `JOIN_GAF_GROUPING`: Join reads with alignment against grouping GFA.
@@ -78,21 +78,21 @@ Because `extract_segments.py` slices sequence regions for each GFA segment, it i
     - If `--max-divergence` is given to `prepare_reads.py`, a `max_divergence` column is added, and it gives the maximum divergence across all segments.
     - If the `qs` BAM tag was not included in input data (it is output by dorado for Oxford Nanopore data, it is removed from PacBio input if the `rq` tag is present because `qs` does not mean quality in PacBio output), it is recomputed as the mean phred score.
     - For Oxford Nanopore duplex data (where the `dx` BAM tag is present), the `is_valid` column is added. Duplex reads with parents whose barcodes match and simplex reads which are not a parent to a valid duplex read.
-1. If `publish_prepare_reads` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_NAME/prepare_reads`.
+1. If `publish_prepare_reads` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_PATH/prepare_reads`.
 1. Consensus.
     - If `prepare_consensus` is `true` is set, consensus generation proceeds in two steps. This is the default as it may be more memory efficient to specify different memory limits for the preparation (read grouping) step and the consensus generation step.
         1. `PREPARE_CONSENSUS`: Groups reads by alignment path into a set of output files (number specified by `consensus_jobs`). If `--limit-depth N` is given, `read_seq`/`read_phred`/`grouping_segments` columns will be set to `null` for every read after the Nth read in each group (this is to reduce storage/memory usage when a small number of groups has a disproportionate number of reads assigned to it, usually these groups are not complete barcodes and will be filtered out anyway, but they are retained in this step for diagnostic purposes). Adds the following columns:
             - `grouping_depth`: Number of reads which share that read's alignment path.
             - `grouping_duplex_depth`: Same, but only counts duplex reads. Only generated in input reads contain `dx` SAM tag.
-        1. If `publish_prepare_reads` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_NAME/prepare_reads`.
+        1. If `publish_prepare_reads` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_PATH/prepare_reads`.
         1. `CONSENSUS_PREPARED`: For each input file, compute consensus sequences for each read group in that file. If `--min-depth` or `--min-duplex-depth`, only computes consensus sequences for groups with at least those depths. If `--limit-depth N` is given, only use the longest `N` sequences to compute consensus sequences, discarding the remainder. Adds the columns `consensus_depth` (and `consensus_duplex_depth` if the `dx` SAM tag appears in input) recording the depth that was used for computing the consensus sequence. If `--max-divergence` is given, only use reads with alignments with at most that maximum divergence across all segments. `--max-length L` filters out all reads longer than `L`.
     - `CONSENSUS`: Do both `PREPARE_CONSENSUS` and `CONSENSUS_PREPARED` in a single step.
-1. If `publish_consensus` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_NAME/consensus`.
+1. If `publish_consensus` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_PATH/consensus`.
 1. `GRAPHALIGNER_VARIANTS`: Align consensus sequences to variants GFA.
 1. `JOIN_GAF_VARIANTS`: Join consensus sequences with output of `GRAPHALIGNER_VARIANTS`. This will output alignment path as `variants_path` and alignment CIGAR string as `cg`.
-1. If `publish_join_gaf_variants` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_NAME/join_gaf_variants`.
+1. If `publish_join_gaf_variants` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_PATH/join_gaf_variants`.
 1. `REALIGN`: Given a table of consensus sequences aligned to the variants GFA, `realign.py` uses either the `parasail` (default) or `pywfa` pairwise aligner to realign consensus sequences to the linear reference constructed using the GAF alignment. This pairwise realignment is optional but compared with the GraphAligner output offers better guarantees of alignment optimality and more flexible handling of degenerate bases and nonstandard alignment penalties. If `realign` is `true`, realignment score and CIGAR string will be stored in `realign_score`, `realign_cg` columns, respectively.
-1. If `publish_realign` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_NAME/realign`.
+1. If `publish_realign` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_PATH/realign`.
 1. <a id="extract-segments" />`EXTRACT_SEGMENTS`: Uses the consensus sequence, alignment path, and alignment CIGAR string to define a large number of columns that are convenient for downstream analysis. If `realign` is `false`, `--cigar-col cg` must be included in `extract_segments_args` (it defaults to `realign_cg`). Adds a `is_primary_alignment` column indicating if that row corresponds to the primary alignment of a given consensus sequence to the variants GFA (non-primary alignments should be filtered out for most downstream analysis). It also adds the following columns for each segment `seg`:
     - `seg|seq`: The slice of the consensus sequence that aligns to segment `seg`.
     - `seg|cigar`: The slice of the CIGAR string that corresponds to the alignment across segment `seg`.
@@ -101,7 +101,7 @@ Because `extract_segments.py` slices sequence regions for each GFA segment, it i
     - `seg|mismatches`: The number of mismatches in the CIGAR string for this segment.
     - `seg|insertions`: The number of insertions in the CIGAR string for this segment.
     - `seg|deletions`: The number of deletions in the CIGAR string for this segment.
-1. If `publish_extract_segments` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_NAME/extract_segments`.
+1. If `publish_extract_segments` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_PATH/extract_segments`.
 
 # Installation
 Conda environment creation takes a while, so do this in an interactive job on HMS O2.
@@ -126,17 +126,29 @@ This creates a conda environment called `barcoded_amplicon_pipeline` (you can ca
 7. Open another terminal (or tmux) window and periodically run `less out.log` (scroll to the bottom with shift-G) to monitor progress. Additionally, it may be helpful to monitor SLURM jobs with `squeue --me|less`. If the pipeline exits prematurely, see [troubleshooting](#troubleshooting).
 8. Optionally, you may use the `notebooks/Eaton.ipynb` notebook to convert the output of the `extract_segments` step (the final step) into a Daniel Eaton format codebook.
 
-Pipeline output for each step is written to the directory `/path/to/data/output/RUN_NAME/STEP`. By default, `RUN_NAME` is `default`. `STEP` is one of `POD5`, `bam_simplex`, `bam`, `fastq`, `prepare_reads`, `prepare_consensus`, `consensus`, `join_gaf_variants`, `realign`, and `extract_segments`. Note that the output files contained are symlinks into `/path/to/data/work`. You must include the `-L` option when copying: e.g., archive the pipeline output with a command like `cp -RL /path/to/data/output/default/extract_segments /path/to/archival/storage/my_run_extract_segments`. Note that if you `rm -rf /path/to/data/work` to clear pipeline intermediate data, this will **delete pipeline output** as well. It is recommended that the desired output is copied to long-term storage upon successful completion of the pipeline. If you run nextflow with the `-report` and `-timeline` options, nextflow will output files with names like `report-20241029-36282066.html` and `timeline-20241029-36282066.html` into the run directory. One contains a timeline showing the execution schedule of each task. The other contains quantile plots of memory usage/execution time for each step. It also contains an interactively-filterable table of tasks, statistics about each task, and each task's working directory (under `path/to/data/work`). This last is is helpful for debugging, as you may want to `cd` into one of those task working directories and re-run a computation with `bash .command.sh` to validate a code change before rerunning the pipeline.
+Pipeline output for each step is written to the directory `/path/to/data/output/RUN_PATH/STEP`. By default, `RUN_PATH` is `default`. `STEP` is one of `POD5`, `bam_simplex`, `bam`, `fastq`, `prepare_reads`, `prepare_consensus`, `consensus`, `join_gaf_variants`, `realign`, and `extract_segments`. Note that the output files contained are symlinks into `/path/to/data/work`. You must include the `-L` option when copying: e.g., archive the pipeline output with a command like `cp -RL /path/to/data/output/default/extract_segments /path/to/archival/storage/my_run_extract_segments`. Note that if you `rm -rf /path/to/data/work` to clear pipeline intermediate data, this will **delete pipeline output** as well. It is recommended that the desired output is copied to long-term storage upon successful completion of the pipeline. If you run nextflow with the `-report` and `-timeline` options, nextflow will output files with names like `report-20241029-36282066.html` and `timeline-20241029-36282066.html` into the run directory. One contains a timeline showing the execution schedule of each task. The other contains quantile plots of memory usage/execution time for each step. It also contains an interactively-filterable table of tasks, statistics about each task, and each task's working directory (under `path/to/data/work`). This last is is helpful for debugging, as you may want to `cd` into one of those task working directories and re-run a computation with `bash .command.sh` to validate a code change before rerunning the pipeline.
 
 # Configuration
 
 When setting up a new run, make a copy of the `examples/run` directory. This directory should contain three files:
 - `main.nf`: Boilerplate, does not need to be modified.
-- `nextflow.config`: Edit so that `params.root` points to a directory containing input data. By default, Nextflow will store its intermediate files under `${params.root}/work` and pipeline output will be symlinked under `${params.root}/output/RUN_NAME/STEP_NAME`.
+- `nextflow.config`: Edit so that `params.root` points to a directory containing input data. By default, Nextflow will store its intermediate files under `${params.root}/work` and pipeline output will be symlinked under `${params.root}/output/RUN_PATH/STEP_NAME`.
 - `samples.toml`: Specifies the operation of the pipeline. One of the input parameters (e.g., `pod5_input`, `fastq_input`, `bam_input`) should be set to the correct glob expression.
 
 ## `samples.toml`
-One or more pipeline runs may be defined in a `samples.toml` file. The `samples.toml` DSL allows for flexible processing of multiple datasets (samples) with multiple different parameter sets each, but the following simple examples illustrate typical usage.
+One or more pipeline runs may be defined in a `samples.toml` file. The `samples.toml` mini-language uses thet [TOML](https://toml.io/) syntax and allows for flexible processing of multiple datasets (“samples”) with multiple different parameter sets each.
+
+A `samples.toml` file can contain:
+- Zero or more `[[samples]]` blocks to specify multiple datasets (“samples”) to be processed.
+- Zero or more `[[params]]` blocks to specify multiple parameter sets (“param set”) that are to be applied to each sample.
+- An optional `[defaults]` block which specifies default parameters (can be overridden by samples and param sets).
+- An optional top-level string named `tsv` which contains a table of tab-separated values. The rows of the tsv table become the list of samples and the columns the different parameter values (the first line of the tsv is interpreted as a column header).
+
+The pipeline is run for each combination of sample and param set (i.e., the set of pipeline runs is the Cartesian product of param sets and samples). The parameters given in a `[[samples]]` block override those given in a `[[params]]` blocks, which in turn overrides those given in the `[defaults]` block. Samples are expected to have a unique `name` parameter, and param sets are expected to have a unique `run_path` parameter. In that case, the output directory of a given run will be `${params.root}/output/${run_path}/${name}/STEP_NAME`. If no samples are defined, the output directory will be `${params.root}/output/${run_path}/STEP_NAME`. If no samples nor param sets are defined (only the `[defaults]` block), the output directory will be `${params.root}/output/defaults/STEP_NAME`. String parameter values can use [Groovy-style string interpolation](https://groovy-lang.org/syntax.html#_string_interpolation) to automatically make substitutions using other parameter values.
+
+For examples of advanced usage, see the `examples/samples.toml` directory.
+
+The following simple examples illustrate typical usage.
 
 An example for processing PromethION FASTQ output:
 ```toml
@@ -171,6 +183,8 @@ consensus_jobs_per_align_job = 8
 find_duplex_pairs_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
 prepare_reads_args = "-x UNS9,BC:T7_prom,BC:UMI:upstream,BC:UMI,BC:UMI:downstream,BC:spacer2,BC:term:T7,BC:term:T7hyb10,JUNC10_UNS10"
 ```
+
+These examples include a comma-delimited list of segments specified with the `-x` (exclude) option to `find_duplex_pairs.py` and `prepare_reads_args.py`. This excludes the constant (non-variable) segments in the barcode, making it such that grouping is only done using the `BC:BIT0=0`,...,`BC:BIT29=1` segments. Without this, one read that has the same barcode as another read except it truncates right after the barcode so does not align to one of the constant segments flanking the barcode bits would be placed in a different read group. This is likely not desirable, hence these exclusions. Note that `consensus.py --skip-consensus` (run during the `PREPARE_CONSENSUS` step) actually performs the read grouping, but `prepare_reads.py` (during the `PREPARE_READS` step) performs the orientation normalization and filtering of the alignment path which determines how reads will be grouped. In general, you likely want to supply the same segment include/exclude options to both `find_duplex_pairs.py` and `prepare_reads_args.py`, though `find_duplex_pairs_args` is only used for runs with the parameters `basecall: true, duplex: true, use_dorado_duplex_pairing: false`.
 
 ## Parameters
 The pipeline can be configured with the following parameters:
@@ -222,7 +236,7 @@ The pipeline can be configured with the following parameters:
 <dt><code>realign</code> (default: <code>true</code>)<dt>
 <dd>Whether to run the <code>REALIGN</code> step (see <a href="#pipeline">above</a>).</dd>
 <dt><code>publish_pod5</code>, <code>publish_bam_simplex</code>, <code>publish_bam</code>, <code>publish_fastq</code>, <code>publish_prepare_reads</code>, <code>publish_prepare_consensus</code>, <code>publish_consensus</code>, <code>publish_join_gaf_variants</code>, <code>publish_realign</code>, <code>publish_extract_segments</code> (default: <code>true</code>)<dt>
-<dd>Whether to symlink the output of each step to `path/to/data/output/RUN_NAME/STEP_NAME`.</dd>
+<dd>Whether to symlink the output of each step to `path/to/data/output/RUN_PATH/STEP_NAME`.</dd>
 <dt><code>output</code> (default: <code>"extract_segments"</code>)<dt>
 <dd>Possible values: <code>"pod5"</code> (output pod5 after chunking/splitting), <code>"basecaller"</code> (output basecalled BAM and FASTQ), <code>"consensus"</code> (output consensus sequences), <code>"extract_segments"</code> (run pipeline to completion).</dd>
 <dt><code>samtools_fastq_args</code> (default: <code>"-T \"*\""</code>)<dt>
