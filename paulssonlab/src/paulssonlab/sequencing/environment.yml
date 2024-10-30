@@ -5,8 +5,9 @@ channels:
   - defaults
 dependencies:
   - black
+  - conda
   - mamba
   - jupyterlab
   - jupyterlab_code_formatter
-  - nextflow
+  - nextflow=24.04.4 # TODO: see https://github.com/nextflow-io/nextflow/issues/5441
   - python

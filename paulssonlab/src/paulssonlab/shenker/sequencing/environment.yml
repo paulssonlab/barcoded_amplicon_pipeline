@@ -7,8 +7,8 @@ dependencies:
   - awkward
   - biopython
   - black
+  - conda
   - click
-  - mamba
   - cytoolz
   - dask
   - dask-jobqueue
@@ -20,6 +20,7 @@ dependencies:
   - isort
   - jupyterlab
   - jupyterlab_code_formatter
+  - mamba
   - matplotlib
   - networkx
   - nextflow=24.04.4 # TODO: see https://github.com/nextflow-io/nextflow/issues/5441
@@ -31,7 +32,7 @@ dependencies:
   - pip
   - pip:
     - pywfa
-  - pyabpoa
+  - pyabpoa=1.5.2=py312he57d009_0 # TODO: waiting on https://github.com/yangao07/abPOA/issues/75
   - pysam
   - pyspoa
   - polars-u64-idx
