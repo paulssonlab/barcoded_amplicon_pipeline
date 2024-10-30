@@ -14,7 +14,7 @@ process FIND_DUPLEX_PAIRS {
 
     script:
     """
-    ${src}/sequencing/bin/find_duplex_pairs.py ${meta.find_duplex_reads_args ?: ""} --gfa ${gfa} --gaf ${gaf} ${bam} ${meta.id}_pairs.txt
+    ${PIPELINE_ROOT}/sequencing/bin/find_duplex_pairs.py ${meta.find_duplex_reads_args ?: ""} --gfa ${gfa} --gaf ${gaf} ${bam} ${meta.id}_pairs.txt
     """
 
     stub:
@@ -39,7 +39,7 @@ process JOIN_GAF {
 
     script:
     """
-    ${src}/sequencing/bin/join_gaf.py ${meta.join_gaf_args ?: ""} --input-format ${meta.input_format} --output-format ${meta.output_format} --gaf ${gaf} ${input} ${meta.id}.${meta.output_format}
+    ${PIPELINE_ROOT}/sequencing/bin/join_gaf.py ${meta.join_gaf_args ?: ""} --input-format ${meta.input_format} --output-format ${meta.output_format} --gaf ${gaf} ${input} ${meta.id}.${meta.output_format}
     """
 
     stub:
@@ -64,7 +64,7 @@ process PREPARE_READS {
 
     script:
     """
-    ${src}/sequencing/bin/prepare_reads.py ${meta.prepare_reads_args ?: ""} --input-format ${meta.input_format} --output-format ${meta.output_format} --gfa ${gfa} ${input} ${meta.id}.${meta.output_format}
+    ${PIPELINE_ROOT}/sequencing/bin/prepare_reads.py ${meta.prepare_reads_args ?: ""} --input-format ${meta.input_format} --output-format ${meta.output_format} --gfa ${gfa} ${input} ${meta.id}.${meta.output_format}
     """
 
     stub:
@@ -91,7 +91,7 @@ process PREPARE_CONSENSUS {
 
     script:
     """
-    ${src}/sequencing/bin/consensus.py --skip-consensus ${meta.prepare_consensus_args ?: ""} --group ${meta.group} --input-format ${meta.input_format} --output-format ${meta.output_format} --output ${meta.id}.${meta.output_format} ${input}
+    ${PIPELINE_ROOT}/sequencing/bin/consensus.py --skip-consensus ${meta.prepare_consensus_args ?: ""} --group ${meta.group} --input-format ${meta.input_format} --output-format ${meta.output_format} --output ${meta.id}.${meta.output_format} ${input}
     """
 
     stub:
@@ -123,7 +123,7 @@ process CONSENSUS_PREPARED {
     echo FOO 2>&1
     hostname -a 2>&1
     echo BAR 2>&1
-    ${src}/sequencing/bin/consensus.py ${meta.consensus_args ?: ""} --input-format ${meta.input_format} --output-format ${meta.output_format} --output ${meta.id}.${meta.output_format} --fasta ${meta.id}.fasta ${input}
+    ${PIPELINE_ROOT}/sequencing/bin/consensus.py ${meta.consensus_args ?: ""} --input-format ${meta.input_format} --output-format ${meta.output_format} --output ${meta.id}.${meta.output_format} --fasta ${meta.id}.fasta ${input}
     """
 
     stub:
@@ -151,7 +151,7 @@ process CONSENSUS {
 
     script:
     """
-    ${src}/sequencing/bin/consensus.py ${meta.consensus_args ?: ""} --group ${meta.group} --input-format ${meta.input_format} --output-format ${meta.output_format} --output ${meta.id}.${meta.output_format} --fasta ${meta.id}.fasta ${input}
+    ${PIPELINE_ROOT}/sequencing/bin/consensus.py ${meta.consensus_args ?: ""} --group ${meta.group} --input-format ${meta.input_format} --output-format ${meta.output_format} --output ${meta.id}.${meta.output_format} --fasta ${meta.id}.fasta ${input}
     """
 
     stub:
@@ -177,7 +177,7 @@ process REALIGN {
 
     script:
     """
-    ${src}/sequencing/bin/realign.py ${meta.realign_args ?: ""} --input-format ${meta.input_format} --output-format ${meta.output_format} --gfa ${gfa} ${input} ${meta.id}.${meta.output_format}
+    ${PIPELINE_ROOT}/sequencing/bin/realign.py ${meta.realign_args ?: ""} --input-format ${meta.input_format} --output-format ${meta.output_format} --gfa ${gfa} ${input} ${meta.id}.${meta.output_format}
     """
 
     stub:
@@ -202,7 +202,7 @@ process EXTRACT_SEGMENTS {
 
     script:
     """
-    ${src}/sequencing/bin/extract_segments.py ${meta.extract_segments_args ?: ""} --input-format ${meta.input_format} --output-format ${meta.output_format} --gfa ${gfa} ${input} ${meta.id}.${meta.output_format}
+    ${PIPELINE_ROOT}/sequencing/bin/extract_segments.py ${meta.extract_segments_args ?: ""} --input-format ${meta.input_format} --output-format ${meta.output_format} --gfa ${gfa} ${input} ${meta.id}.${meta.output_format}
     """
 
     stub:
