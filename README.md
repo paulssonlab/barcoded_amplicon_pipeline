@@ -104,21 +104,25 @@ Because `extract_segments.py` slices sequence regions for each GFA segment, it i
 1. If `publish_extract_segments` is `true`, symlink Arrow/Parquet output to `path/to/data/output/RUN_NAME/extract_segments`.
 
 # Installation
+Conda environment creation takes a while, so do this in an interactive job on HMS O2.
 ```bash
-git clone HHH
-cd HHH
-mamba env create -f hhh -n nanopore_fish
+git clone git@github.com:paulssonlab/barcoded_amplicon_pipeline.git
+cd barcoded_amplicon_pipeline
+mamba create -f environment.yml -n barcoded_amplicon_pipeline
+mamba activate barcoded_amplicon_pipeline
+pth_file="$(python -c 'import site; print(site.getsitepackages()[0])')/barcoded_amplicon_pipeline.pth"
+echo "$PWD/paulssonlab/src" > "$pth_file"
 ```
 
-This creates a conda environment called `nanopore_fish`. Whenever you want to use the pipeline, you will first need to activate it with `mamba activate nanopore_fish`. In the below instructions, `$PIPELINE_ROOT` refers to the directory into which this repo was cloned.
+This creates a conda environment called `barcoded_amplicon_pipeline` (you can call it whatever you want by changing the argument to `-n`). Whenever you want to use the pipeline, you will first need to activate it with `mamba activate barcoded_amplicon_pipeline`. In the below instructions, `$PIPELINE_ROOT` refers to the directory into which this repo was cloned.
 
 # Usage
 1. Copy the input data (FASTQ, BAM, or POD5) to a scratch directory (on HMS O2, it should be on the scratch filesystem).
-2. FASTQ and BAM output from Oxford Nanopore or PacBio instruments need to be rechunked (into more, smaller files). In an interactive job, with the `nanopore_fish` conda environment activated, run `python $PIPELINE_ROOT/sequencing/bin/chunk_seqs.py --size 2147483648 "~/path/to/data/fastq_pass/*.fastq.gz" ~/path/to/data/fastq_chunked`. 2147483648 bytes corresponds to 2 GiB, which seems to work well. This may take 30-60 min for a PromethION-sized sequencing run.
+2. FASTQ and BAM output from Oxford Nanopore or PacBio instruments need to be rechunked (into more, smaller files). In an interactive job, with the `barcoded_amplicon_pipeline` conda environment activated, run `python $PIPELINE_ROOT/sequencing/bin/chunk_seqs.py --size 2147483648 "~/path/to/data/fastq_pass/*.fastq.gz" ~/path/to/data/fastq_chunked`. 2147483648 bytes corresponds to 2 GiB, which seems to work well. This may take 30-60 min for a PromethION-sized sequencing run.
 3. Create a [GFA](https://gfa-spec.github.io/GFA-spec/GFA1.html). See examples in `examples/gfas`.
 4. Make a copy of the configuration run directory `examples/run`.
-5. In that run directory, edit `nextflow.config` so that `params.root` points to the scratch directory containing the data and `samples.toml` to specify the desired input and output (see Configuration). If you rechunked FASTQ or BAM as described above, you should be sure to specify the rechunked (not original) FASTQ or BAM as input to the pipeline.
-6. `cd` into the run directory and start the pipeline with the command (modifying `PIPELINE_ROOT` to point to where the pipeline repo is cloned): `PIPELINE_ROOT=/home/$USER/nanopore_fish MAMBA_ALWAYS_YES=true time nextflow run main.nf -profile o2 -with-report -with-timeline > out.log`
+5. In that run directory, edit `nextflow.config` so that `params.root` points to the scratch directory containing the data and `samples.toml` to specify the desired input and output (see [Configuration](#configuration)). If you rechunked FASTQ or BAM as described above, you should be sure to specify the rechunked (not original) FASTQ or BAM as input to the pipeline.
+6. `cd` into the run directory and start the pipeline with the command (modifying `PIPELINE_ROOT` to point to where the pipeline repo is cloned): `PIPELINE_ROOT=/home/$USER/barcoded_amplicon_pipeline MAMBA_ALWAYS_YES=true time nextflow run main.nf -profile o2 -with-report -with-timeline > out.log`
 7. Open another terminal (or tmux) window and periodically run `less out.log` (scroll to the bottom with shift-G) to monitor progress. Additionally, it may be helpful to monitor SLURM jobs with `squeue --me|less`. If the pipeline exits prematurely, see [troubleshooting](#troubleshooting).
 8. Optionally, you may use the `notebooks/Eaton.ipynb` notebook to convert the output of the `extract_segments` step (the final step) into a Daniel Eaton format codebook.
 
@@ -257,6 +261,9 @@ The pipeline can be configured with the following parameters:
 Exit code 137 means a task hit the memory limit, exit code 140 indicates that it hit the time limit. Intermediate files If you want to clear all output and re-run the pipeline from the beginning, run `rm -rf /path/to/data/work`. it may be helpful to clean up log files and reports by running `rm -rf .nextflow*`. TODO.
 
 # Known issues
+
+## Excluding old HMS O2 compute nodes
+Running nextflow with the `-profile o2` option will blacklist the compute nodes listed in the text file `$PIPELINE_ROOT/exclude_non_avx2.txt`. This is necessary because the older compute nodes in HMS O2 have old processors that do not support the modern SIMD instruction sets (e.g., AVX2) that are required by the conda-forge builds of polars and pyabpoa. If there's an individual compute node that is causing crashes or you want to blacklist for any reason, you can add its hostname to `$PIPELINE_ROOT/exclude_non_avx2.txt`
 
 ## Paulsson Lab GPU node
 I have not gotten the pipeline to run successfully on the Paulsson Lab GPU node. It is likely a matter of recompiling polars and/or abpoa (to use the correct SIMD compiler flags) as well as tweaking the dorado resource requirements.
