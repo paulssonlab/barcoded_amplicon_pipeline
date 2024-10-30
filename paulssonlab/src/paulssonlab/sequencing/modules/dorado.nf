@@ -102,8 +102,9 @@ process DORADO_DUPLEX_WITH_PAIRS {
     tuple val(meta), path("${meta.id}_duplex.bam")
 
     // TODO
-    // conda "${params.conda_env_dir}/dorado.yml"
+    conda "${params.conda_env_dir}/samtools.yml"
 
+    // TODO: need to double-check that piping through samtools to select out duplex reads is necessary
     script:
     """
     module load gcc/9.2.0 cuda/12.1
@@ -112,7 +113,7 @@ process DORADO_DUPLEX_WITH_PAIRS {
     hostname -a
     echo -n "GPU: "
     nvidia-smi --query-gpu=name --format=csv,noheader
-    dorado duplex --pairs ${pairs} ${meta.dorado_duplex_args ?: ""} ${dorado_model} pod5 > ${meta.id}_duplex.bam
+    dorado duplex --pairs ${pairs} ${meta.dorado_duplex_args ?: ""} ${dorado_model} pod5 | samtools view -b -h -d dx:1 > ${meta.id}_duplex.bam
     """
 
     stub:
