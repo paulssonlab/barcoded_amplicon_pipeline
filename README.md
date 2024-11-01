@@ -118,7 +118,7 @@ This creates a conda environment called `barcoded_amplicon_pipeline` (you can ca
 
 # Usage
 1. Copy the input data (FASTQ, BAM, or POD5) to a scratch directory (on HMS O2, it should be on the scratch filesystem).
-2. FASTQ and BAM output from Oxford Nanopore or PacBio instruments need to be rechunked (into more, smaller files). In an interactive job, with the `barcoded_amplicon_pipeline` conda environment activated, run `python $PIPELINE_ROOT/sequencing/bin/chunk_seqs.py --size 2147483648 "~/path/to/data/fastq_pass/*.fastq.gz" ~/path/to/data/fastq_chunked`. 2147483648 bytes corresponds to 2 GiB, which seems to work well. This may take 30-60 min for a PromethION-sized sequencing run.
+2. FASTQ and BAM output from Oxford Nanopore or PacBio instruments need to be rechunked (into more, smaller files). In an interactive job, with the `barcoded_amplicon_pipeline` conda environment activated, run `python $PIPELINE_ROOT/paulssonlab/src/paulssonlab/sequencing/bin/chunk_seqs.py --size 2147483648 "~/path/to/data/fastq_pass/*.fastq.gz" ~/path/to/data/fastq_chunked`. 2147483648 bytes corresponds to 2 GiB, which seems to work well. This may take 30-60 min for a PromethION-sized sequencing run.
 3. Create a [GFA](https://gfa-spec.github.io/GFA-spec/GFA1.html). See examples in `examples/gfas`.
 4. Make a copy of the configuration run directory `examples/run`.
 5. In that run directory, edit `nextflow.config` so that `params.root` points to the scratch directory containing the data and `samples.toml` to specify the desired input and output (see [Configuration](#configuration)). If you rechunked FASTQ or BAM as described above, you should be sure to specify the rechunked (not original) FASTQ or BAM as input to the pipeline.

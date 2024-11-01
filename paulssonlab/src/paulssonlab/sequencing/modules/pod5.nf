@@ -110,7 +110,7 @@ process SPLIT_READ_IDS {
 
     script:
     """
-    ${PIPELINE_ROOT}/sequencing/bin/split_read_ids.py ${meta.split_read_ids_args ?: ""} ${tsv} read_lists
+    ${PIPELINE_ROOT}/paulssonlab/src/paulssonlab/sequencing/bin/split_read_ids.py ${meta.split_read_ids_args ?: ""} ${tsv} read_lists
     """
 
     stub:
